@@ -3,63 +3,84 @@
 The headless content engine + AI agent infrastructure powering the Envisioned
 Intelligent Websites product family.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/envisionedbrands/envisioned-intelligent-websites-backend)
+
+---
+
+## What this is
+
+A complete back-of-house for an AI-driven website:
+
+- **AI content pipeline** — idea → outline → article → publish, powered by Anthropic
+- **Wiki sync** — pulls markdown from a companion `aureum-wiki`-style repo into Supabase
+- **Lead capture API + embed snippet** — drop on any existing site to route submissions to your DB
+- **Publisher adapters** *(roadmap)* — push articles into existing CMS platforms (Showit / WordPress / Webflow / Squarespace / Ghost / Notion / Substack)
+- **Admin dashboard** — content calendar, leads, analytics, agents, graph view
+
+Pairs with the [Envisioned Intelligent Websites Frontend](https://github.com/envisionedbrands/envisioned-intelligent-websites-frontend) (templates), or use it standalone with your existing site via a publisher adapter.
+
+---
+
+## One-click deploy
+
+Click the button above. Cloudflare will:
+
+1. Fork this repo into your GitHub account
+2. Create a new Cloudflare Worker connected to the fork
+3. Deploy on every future push to `main` automatically
+
+You'll then need to set secrets via `wrangler secret put` (or the Cloudflare dashboard):
+
+```bash
+wrangler secret put SUPABASE_SERVICE_ROLE_KEY    # from Supabase → Settings → API
+wrangler secret put ANTHROPIC_API_KEY            # from console.anthropic.com
+wrangler secret put RESEND_API_KEY               # from resend.com (optional, for email)
+wrangler secret put API_SECRET_KEY               # any random 32+ char string — must match frontend
 ```
-┌─ Backend (this repo) ─────────────────────────────────────────┐
-│                                                               │
-│  • AI content pipeline (idea → outline → article → publish)   │
-│  • Wiki sync (markdown brand intelligence → Supabase)         │
-│  • Lead capture API + embed snippet for external sites        │
-│  • Publisher adapters (Showit / WP / Webflow / Squarespace /  │
-│    Ghost / Notion / Substack)                                 │
-│  • Admin dashboard (content, leads, analytics, agents)        │
-│                                                               │
-└────────────────────┬──────────────────────────────────────────┘
-                     │ writes to
-                     ↓
-              Supabase (shared DB)
-                     ↑
-                     │ reads from
-┌─ Frontend ──────────────────────────────────────────────────────┐
-│  • envisioned-intelligent-websites-template-editorial           │
-│  • envisioned-intelligent-websites-template-warm                │
-│  • OR any external website via publisher adapter + lead embed   │
-└─────────────────────────────────────────────────────────────────┘
+
+And update `wrangler.jsonc` `vars` with your actual Supabase URL, anon key, and frontend URL — then push. Cloudflare redeploys automatically.
+
+---
+
+## Local development
+
+```bash
+git clone https://github.com/<your-fork>/envisioned-intelligent-websites-backend.git
+cd envisioned-intelligent-websites-backend
+npm install
+cp .env.local.example .env.local      # fill in real values
+npm run dev                            # serves on :3001
 ```
+
+Default port is **3001** (the companion frontend uses :3000).
+
+---
+
+## What you need to bring
+
+| Thing | Where to get it | Required? |
+|---|---|---|
+| Supabase project | [supabase.com](https://supabase.com) (free tier OK) | ✅ |
+| Cloudflare account | [cloudflare.com](https://cloudflare.com) (free tier OK) | ✅ |
+| Anthropic API key | [console.anthropic.com](https://console.anthropic.com) (paid, ~$5 minimum) | ✅ for AI features |
+| Resend account | [resend.com](https://resend.com) (free tier OK) | Optional |
+
+After you fork the repo, run the schema migrations once in your Supabase SQL Editor:
+- `supabase/migrations/001_backend_core.sql`
+
+That installs the `articles`, `content_calendar`, `wiki_articles`, `leads`, and supporting tables.
+
+---
 
 ## Three usage modes
 
-This backend is designed to support three different audiences:
+| Mode | What happens |
+|---|---|
+| **You already have a website** (Showit / Squarespace / Webflow / WP) | Deploy backend; pick a publisher adapter; paste the lead-capture embed onto your contact page; AI writes articles, pushes them into your existing site |
+| **You want a new editorial site** (bold/dark/authoritative) | Deploy backend + `templates/editorial` from the [frontend repo](https://github.com/envisionedbrands/envisioned-intelligent-websites-frontend) |
+| **You want a new warm site** (soft/light/intimate) | Deploy backend + `templates/warm` from the same frontend repo |
 
-1. **You already have a website** (Showit, Squarespace, Webflow, WordPress, etc.)
-   → install the backend, pick a publisher adapter for your CMS, paste the
-   lead-capture embed onto your contact page. AI writes articles, publishes
-   to your existing site.
-
-2. **You want a fresh editorial site** (bold, dark, authoritative)
-   → install the backend + `envisioned-intelligent-websites-template-editorial`.
-
-3. **You want a fresh warm site** (soft, light, intimate)
-   → install the backend + `envisioned-intelligent-websites-template-warm`.
-
-In all three modes, the backend is the same. Only the publishing target differs.
-
-## Status
-
-🚧 **Work in progress.** This repo is being assembled from a working reference
-implementation. Forks are welcome but expect the API surface to shift as the
-product line stabilizes.
-
-## Quick start
-
-The fastest path is via the installer:
-
-```bash
-# Coming soon — a Claude Code skill that runs a brand interview and
-# provisions a full Envisioned Intelligent Websites stack.
-```
-
-Manual setup instructions will live in `SETUP.md` once the templates and
-installer are wired up.
+---
 
 ## Architecture
 
@@ -69,6 +90,8 @@ installer are wired up.
 - **AI:** Anthropic API (configurable to OpenAI as fallback)
 - **Email:** Resend
 - **Auth:** Supabase Auth (admin-only — there is no public signup)
+
+---
 
 ## License
 

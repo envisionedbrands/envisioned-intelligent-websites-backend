@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "main": ".open-next/worker.js",
-  "name": "digital-home-backend",
+  "name": "envisioned-intelligent-websites-backend",
   "compatibility_date": "2025-09-27",
   "compatibility_flags": [
     "nodejs_compat"
@@ -13,11 +13,7 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "digital-home-backend"
-    },
-    {
-      "binding": "FRONTEND_WORKER",
-      "service": "digital-home-frontend"
+      "service": "envisioned-intelligent-websites-backend"
     }
   ],
   "images": {
@@ -26,13 +22,15 @@
   "observability": {
     "enabled": true
   },
-  // Non-secret env vars. Secrets (API keys) are set via `wrangler secret put`.
+  // Non-secret env vars. Secrets (Supabase service role, Anthropic key, Resend key,
+  // API_SECRET_KEY) are set via `wrangler secret put` after the first deploy.
   "vars": {
     "SUPABASE_URL": "https://your-project.supabase.co",
     "SUPABASE_ANON_KEY": "your-anon-key",
     "NEXT_PUBLIC_SUPABASE_URL": "https://your-project.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-anon-key",
-    "DIGITAL_HOME_URL": "https://yourdomain.com",
-    "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://yourdomain.com"
+    "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://your-frontend-domain.com",
+    "API_SIGNATURE_REQUIRED": "true",
+    "API_REQUEST_SIGNATURE_TTL_SECONDS": "300"
   }
 }
