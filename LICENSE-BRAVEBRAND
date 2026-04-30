@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Maria-Ines Design Studio (d/b/a Envisioned)
+Copyright (c) 2026 Digital Home Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -11,12 +11,6 @@ furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
-
-This Software is built on top of the Digital Home Starter by BraveBrand. The
-original BraveBrand MIT license is preserved at LICENSE-BRAVEBRAND and applies
-to the foundational architecture from which this work is derived. See NOTICE.md
-for the attribution and a summary of modifications added by Maria-Ines Design
-Studio (d/b/a Envisioned).
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
