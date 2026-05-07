@@ -44,25 +44,16 @@ All four live under `envisionedbrands` on GitHub (private).
 - ❌ Build lead-capture embed snippet (`/embed.js` route + minimal JS)
 - ❌ Build manual export endpoint (`POST /api/articles/:id/export?format=html`)
   as the "works for everyone" fallback
-- ❌ De-couple Aureum-specific branding from the reference implementation
-  (Aureum lives at `aureumai26/intelligent-website-backend` and is currently
-  the only working real instance — eventually some of its hardening should
-  flow back here as upstream improvements)
 - ❌ PRD for the full product — not yet drafted (next step after this scaffold)
 
-## Reference implementation
+## Notes for contributors
 
-The Aureum AI agency is currently the only fully wired-up instance of this
-backend. It lives at `aureumai26/intelligent-website-backend` (private) and is
-deployed at `aureum-backend.team-7e0.workers.dev`. When questions arise about
-"how should this work in practice", check that repo — it has live env vars,
-real Supabase data, working Cloudflare Workers config, and a months-of-real-use
-content pipeline.
+This backend is brand-neutral by design. Any improvements landed here
+should keep it that way — no studio-, agency-, or brand-specific copy in
+LICENSE, NOTICE, README, CLAUDE.md, code comments, or default env values.
+When in doubt, prefer placeholder strings or env-var-driven values over
+hardcoded ones.
 
-**Important:** Aureum's repo has Aureum-specific brand intelligence baked into
-its content-corpus folder. Any code patterns or schema decisions extracted
-from Aureum's repo back into this one need to be **brand-neutralized** before
-landing here.
 
 ## Key files / where things live
 

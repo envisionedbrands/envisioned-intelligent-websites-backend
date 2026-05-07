@@ -12,8 +12,8 @@ Intelligent Websites product family.
 A complete back-of-house for an AI-driven website:
 
 - **AI content pipeline** — idea → outline → article → publish, powered by Anthropic
-- **Wiki sync** — pulls markdown from a companion `aureum-wiki`-style repo into Supabase
 - **Lead capture API + embed snippet** — drop on any existing site to route submissions to your DB
+- **Optional brand wiki sync** — if you keep a private markdown wiki in a separate GitHub repo (any structure), the backend can sync it into Supabase as brand intelligence the AI agents read from. Skip if you don't need it.
 - **Publisher adapters** *(roadmap)* — push articles into existing CMS platforms (Showit / WordPress / Webflow / Squarespace / Ghost / Notion / Substack)
 - **Admin dashboard** — content calendar, leads, analytics, agents, graph view
 
