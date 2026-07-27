@@ -14,6 +14,10 @@
     {
       "binding": "WORKER_SELF_REFERENCE",
       "service": "envisioned-intelligent-websites-backend"
+    },
+    {
+      "binding": "FRONTEND_WORKER",
+      "service": "digital-home-frontend-starter"
     }
   ],
   "images": {
@@ -25,11 +29,12 @@
   // Non-secret env vars. Secrets (Supabase service role, Anthropic key, Resend key,
   // API_SECRET_KEY) are set via `wrangler secret put` after the first deploy.
   "vars": {
-    "SUPABASE_URL": "https://your-project.supabase.co",
-    "SUPABASE_ANON_KEY": "your-anon-key",
-    "NEXT_PUBLIC_SUPABASE_URL": "https://your-project.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-anon-key",
-    "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://your-frontend-domain.com",
+    "SUPABASE_URL": "https://aqylffhuzunpimrebgye.supabase.co",
+    "SUPABASE_ANON_KEY": "sb_publishable_JumdNZ3GzN06G5oVgBR8_Q_SX8vdlbq",
+    "NEXT_PUBLIC_SUPABASE_URL": "https://aqylffhuzunpimrebgye.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_JumdNZ3GzN06G5oVgBR8_Q_SX8vdlbq",
+    "DIGITAL_HOME_URL": "https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev",
+    "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev",
     "API_SIGNATURE_REQUIRED": "true",
     "API_REQUEST_SIGNATURE_TTL_SECONDS": "300"
   }
