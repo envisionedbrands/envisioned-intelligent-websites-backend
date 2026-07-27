@@ -278,3 +278,31 @@ a {
     @apply font-sans;
   }
 }
+/* ── Light theme (Envisioned Winter container) ──────────────────────────────
+   Toggled by adding `light` (and removing `dark`) on <html>.
+   Tailwind v4 utilities reference these variables at runtime, so remapping
+   them here re-skins both the minimal-* tokens and the hardcoded
+   white/black/zinc utilities without touching component files. */
+html.light {
+  --color-minimal-bg: #FBFAF9;
+  --color-minimal-border: #E3DED5;
+  --color-minimal-muted: #8A7A68;
+  --color-minimal-accent: #1E1E1E;
+  --color-minimal-row: #F3F1EC;
+
+  --color-white: #1E1E1E;
+  --color-black: #FBFAF9;
+  --color-zinc-100: #2A2724;
+  --color-zinc-200: #3A3633;
+  --color-zinc-300: #4A4540;
+  --color-zinc-400: #5C554E;
+  --color-zinc-500: #6E665D;
+  --color-zinc-600: #8A7A68;
+  --color-zinc-700: #C9C2B6;
+  --color-zinc-800: #E3DED5;
+  --color-zinc-900: #EDE9E3;
+  --color-zinc-950: #F7F5F0;
+
+  --color-status-planned: #8A7A68;
+  --color-status-draft: #8A7A68;
+}

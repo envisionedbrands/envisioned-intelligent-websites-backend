@@ -299,7 +299,7 @@ If `status` is `401`, the API key doesn't match between Backend and Frontend. Re
 - **Route auth split:**
   - session-only: admin dashboard APIs (`/api/articles`, `/api/content-calendar`, `/api/publish`, `/api/reset-writing`, `/api/settings`, `/api/setup`, `/api/test-frontend`)
   - session or signed API request: machine-triggered automation routes (`/api/write-article`, `/api/write-now`, `/api/trend-scan`)
-- **Dark theme only.** This is a professional dashboard, not a consumer app.
+- **Dark theme by default, light theme available.** A sidebar toggle switches themes (persisted in `localStorage` as `dh-theme`). Light mode is implemented purely in `globals.css` by remapping the `--color-minimal-*` tokens and the hardcoded white/black/zinc utility variables under `html.light` — do NOT restyle components per-theme; add/adjust variable mappings there instead.
 - **CRITICAL — Shared database types:** When you modify `src/types/database.ts` or add/change a Supabase migration, you MUST also update the same `src/types/database.ts` file in the Digital Home Frontend Starter repo. These two files must always be identical.
 
 ## Cloudflare / OpenNext Rules

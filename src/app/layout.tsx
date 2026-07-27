@@ -24,7 +24,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={cn("dark", "font-sans", geist.variable)}>
-      <body className={`${geist.variable} ${geistMono.variable} bg-minimal-bg text-white font-sans h-screen w-screen overflow-hidden flex antialiased`}>
+      <head>
+        {/* Apply persisted theme before paint to avoid a flash of the wrong theme */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('dh-theme')==='light'){var r=document.documentElement;r.classList.remove('dark');r.classList.add('light');}}catch(e){}`,
+          }}
+        />
+      </head>
+      <body className={`${geist.variable} ${geistMono.variable} bg-minimal-bg text-minimal-accent font-sans h-screen w-screen overflow-hidden flex antialiased`}>
         <Sidebar />
         <main className="flex-1 flex flex-col h-full overflow-hidden">
           {children}

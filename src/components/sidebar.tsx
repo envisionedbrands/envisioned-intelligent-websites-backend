@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 type NavItem = {
   href: string;
@@ -128,6 +129,9 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Theme toggle */}
+      <ThemeToggle />
 
       {/* Version */}
       <div className="text-[8px] text-minimal-muted uppercase tracking-widest">
