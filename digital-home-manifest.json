@@ -1,0 +1,45 @@
+{
+  "skill_version": "2026.07",
+  "installed_at": "2026-07-27T13:10:00Z",
+  "tracks": {
+    "crm_core": { "activated": true, "verified": false },
+    "funnel_analytics": { "activated": true, "verified": false },
+    "ab_testing": { "activated": true, "verified": false },
+    "bookings": { "activated": true, "verified": false }
+  },
+  "migrations": [],
+  "pending": [
+    "Apply migrations 100-103 in the Supabase SQL editor (staged in supabase/migrations/ with sender identity pre-filled — review FROM_NAME/TIMEZONE/CURRENCY values before running)",
+    "Insert crm_capture_key and crm_funnel_secret into backend_settings after migrations run",
+    "Resend account: API key, domain DNS verification, webhook + signing secret",
+    "Cal.com webhook + CALCOM_WEBHOOK_SECRET (bookings track)",
+    "Set new secrets on the Cloudflare Worker via wrangler secret put, then redeploy",
+    "GitHub Actions: set API_SECRET_KEY secret and BACKEND_URL variable for crm-tick.yml, run it once manually",
+    "Run verify/crm-core.md, funnel-analytics.md, ab-testing.md, bookings.md against the live deployment"
+  ],
+  "notes": "Code installed offline in a sandbox session (no live Supabase/Cloudflare access). Migrations are staged in supabase/migrations/, not yet applied. Sender identity assumed as Maria-Inés <hello@mariaines.co>, EUR, Europe/Madrid — edit supabase/migrations/100_crm_core.sql if wrong.",
+  "operator": {
+    "skill_version": "2026.07",
+    "installed_at": "2026-07-27T13:10:00Z",
+    "provider": { "name": "anthropic" },
+    "tracks": {
+      "operator_core": { "activated": true, "verified": false },
+      "mcp": { "activated": true, "verified": false }
+    },
+    "schedule": { "cadence": "weekly", "cron": "0 23 * * 0" },
+    "prompt": {
+      "generated_at": "2026-07-27T13:10:00Z",
+      "brand_context_rows": 0,
+      "thin_brand_context": true,
+      "member_edited": false
+    },
+    "migrations": [],
+    "pending": [
+      "Apply migration 200_agent_operator.sql in the Supabase SQL editor (staged in supabase/migrations/)",
+      "Brand digest in src/lib/agent/prompt.ts was generated from the Envisioned brand design system, not from live brand_context rows — review and enrich it (SITE_URL and offers especially)",
+      "Set OPERATOR_PROVIDER secret on the Worker, redeploy",
+      "GitHub Actions: run Operator Review once manually and confirm green",
+      "Run verify/operator-core.md and verify/mcp.md against the live deployment"
+    ]
+  }
+}
