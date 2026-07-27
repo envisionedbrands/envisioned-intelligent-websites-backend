@@ -17,7 +17,7 @@
     "GitHub Actions: set API_SECRET_KEY secret and BACKEND_URL variable for crm-tick.yml, run it once manually",
     "Run verify/crm-core.md, funnel-analytics.md, ab-testing.md, bookings.md against the live deployment"
   ],
-  "notes": "Code installed offline in a sandbox session (no live Supabase/Cloudflare access). Migrations are staged in supabase/migrations/, not yet applied. Sender identity assumed as Maria-Inés <hello@mariaines.co>, EUR, Europe/Madrid — edit supabase/migrations/100_crm_core.sql if wrong.",
+  "notes": "Code installed offline in a sandbox session (no live Supabase/Cloudflare access). Migrations are staged in supabase/migrations/, not yet applied. Sender identity assumed as Maria-Inés <hello@mariaines.co>, EUR, Europe/Amsterdam — edit supabase/migrations/100_crm_core.sql if wrong.",
   "operator": {
     "skill_version": "2026.07",
     "installed_at": "2026-07-27T13:10:00Z",

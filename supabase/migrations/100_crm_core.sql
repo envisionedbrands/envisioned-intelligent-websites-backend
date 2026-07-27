@@ -5,7 +5,7 @@
 -- Written to be re-runnable (if not exists / drop-first where needed).
 --
 -- INSTALL TOKENS — replace before applying (the /upgrade skill does this):
---   Maria-Inés from Envisioned  hello@mariaines.co  hello@mariaines.co  EUR  Europe/Madrid
+--   Maria-Inés from Envisioned  hello@mariaines.co  hello@mariaines.co  EUR  Europe/Amsterdam
 
 -- ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -279,5 +279,5 @@ where p.is_default
 insert into backend_settings (key, value) values
   ('crm_safe_mode', 'true'::jsonb),
   ('crm_sender', '{"from_name": "Maria-Inés from Envisioned", "from_email": "hello@mariaines.co", "reply_to": "hello@mariaines.co"}'::jsonb),
-  ('crm_send_window', '{"enabled": false, "start_hour": 8, "end_hour": 18, "timezone": "Europe/Madrid", "days": [1,2,3,4,5]}'::jsonb)
+  ('crm_send_window', '{"enabled": false, "start_hour": 8, "end_hour": 18, "timezone": "Europe/Amsterdam", "days": [1,2,3,4,5]}'::jsonb)
 on conflict (key) do nothing;
