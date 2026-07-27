@@ -130,6 +130,20 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Live site */}
+      <a
+        href={process.env.NEXT_PUBLIC_DIGITAL_HOME_URL || 'https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev'}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex flex-col items-center gap-1.5 text-minimal-muted hover:text-white transition-colors"
+        title="Open the live site"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 256 256" fill="currentColor">
+          <path d="M128,24A104,104,0,1,0,232,128,104.12,104.12,0,0,0,128,24Zm87.6,96H175.65c-1.35-32.31-12.16-60.4-27.35-77.83A88.19,88.19,0,0,1,215.6,120ZM128,215.89c-19.16-16.65-31.4-49-32.34-79.89h64.68C159.4,166.87,147.16,199.24,128,215.89ZM95.66,120c.94-30.87,13.18-63.24,32.34-79.89,19.16,16.65,31.4,49,32.34,79.89Zm12-77.83C92.51,59.6,81.7,87.69,80.35,120H40.4A88.19,88.19,0,0,1,107.7,42.17ZM40.4,136H80.35c1.35,32.31,12.16,60.4,27.35,77.83A88.19,88.19,0,0,1,40.4,136Zm107.9,77.83c15.19-17.43,26-45.52,27.35-77.83H215.6A88.19,88.19,0,0,1,148.3,213.83Z" />
+        </svg>
+        <span className="text-[9px] uppercase tracking-wider">Site</span>
+      </a>
+
       {/* Theme toggle */}
       <ThemeToggle />
 
