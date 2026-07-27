@@ -98,7 +98,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex items-center justify-center mb-4">
         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white">
-          Brave
+          ENV
         </span>
       </div>
 
