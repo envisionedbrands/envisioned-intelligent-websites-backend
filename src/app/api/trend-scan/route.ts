@@ -16,6 +16,15 @@ type TrendScanConfig = {
   country: string;
 };
 
+type TrendItem = {
+  title: string;
+  link: string;
+  description: string;
+  publishedAt: string;
+  domain: string;
+  query: string;
+};
+
 type CandidateEntry = {
   title: string;
   search_query: string;
@@ -64,6 +73,19 @@ const ALLOWED_PRIORITIES = new Set<
   NonNullable<Database["public"]["Tables"]["content_calendar"]["Insert"]["priority"]>
 >(["high", "medium", "low"]);
 
+function decodeHtml(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalize(value: string | null | undefined): string {
   return (value || "")
     .toLowerCase()
@@ -105,6 +127,37 @@ function looksLikeDuplicate(candidate: CandidateEntry, existing: Set<string>): b
     }
 
     return false;
+  });
+}
+
+async function fetchTrendFeed(query: string, config: TrendScanConfig): Promise<TrendItem[]> {
+  const params = new URLSearchParams({
+    q: `${query} ${config.include_terms.join(" ")} when:7d`,
+    hl: config.locale,
+    gl: config.country,
+    ceid: `${config.country}:${config.locale.split("-")[0]}`,
+  });
+
+  const url = `https://news.google.com/rss/search?${params.toString()}`;
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) return [];
+
+  const xml = await response.text();
+  const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+
+  return items.slice(0, config.max_headlines_per_domain).map((match) => {
+    const block = match[1];
+    const pick = (tag: string) =>
+      decodeHtml(block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`))?.[1] || "");
+
+    return {
+      title: pick("title"),
+      link: pick("link"),
+      description: pick("description"),
+      publishedAt: pick("pubDate"),
+      domain: query,
+      query,
+    };
   });
 }
 
@@ -193,6 +246,42 @@ export async function POST(request: NextRequest) {
       ? Math.min(body.max_new_entries, 20)
       : config.max_new_entries;
 
+  // Pre-fetched headlines can be supplied in the body (body.items). This is the
+  // primary path in production: Google News RSS blocks Cloudflare Worker IPs, so
+  // the weekly-trend-scan GitHub Action fetches the feeds on its runner and posts
+  // the items here. Direct fetching still works from local/dev environments.
+  const providedItems: TrendItem[] = Array.isArray(body.items)
+    ? (body.items as Partial<TrendItem>[])
+        .filter((item) => typeof item?.title === "string" && typeof item?.link === "string")
+        .slice(0, 60)
+        .map((item) => ({
+          title: String(item.title),
+          link: String(item.link),
+          description: typeof item.description === "string" ? item.description : "",
+          publishedAt: typeof item.publishedAt === "string" ? item.publishedAt : "",
+          domain: typeof item.domain === "string" ? item.domain : "provided",
+          query: typeof item.query === "string" ? item.query : "provided",
+        }))
+    : [];
+
+  let trendItems: TrendItem[] = providedItems;
+  if (trendItems.length === 0) {
+    const feedBatches = await Promise.all(
+      overrideDomains.map(async (domain: string) => fetchTrendFeed(domain, config))
+    );
+    trendItems = feedBatches.flat().filter((item) => item.title && item.link);
+  }
+
+  if (trendItems.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "No trend sources returned usable headlines. (Google News RSS blocks Cloudflare Worker IPs — pass pre-fetched headlines as body.items, as the weekly-trend-scan workflow does.)",
+      },
+      { status: 502 }
+    );
+  }
+
   const { data: existingEntries } = await supabase
     .from("content_calendar")
     .select("title, search_query, target_keyword")
@@ -213,18 +302,25 @@ export async function POST(request: NextRequest) {
     Database["public"]["Tables"]["content_calendar"]["Insert"]["status"]
   > = publishMode === "autonomous" ? "approved" : "planned";
 
+  const promptPayload = trendItems.slice(0, 30).map((item, index) => ({
+    index: index + 1,
+    domain: item.domain,
+    title: item.title,
+    description: item.description,
+    publishedAt: item.publishedAt,
+    link: item.link,
+  }));
+
   const systemPrompt = `You are a trend scanner for a business content system.
 
-Your job is to research what is moving RIGHT NOW in the given domains (use web search)
-and turn what you find into article opportunities for a small business website.
+Your job is to turn recent headlines into article opportunities for a small business website.
 
 Rules:
-- Search the web for recent developments (last 1-2 weeks) in each domain before proposing anything.
 - Focus on practical, article-worthy topics a founder, consultant, or service business could target.
 - Avoid generic news rewrites.
 - Prefer ideas with a clear search angle.
 - Match keyword clusters where possible. Use "emerging" if none fit.
-- After your research, end your response with ONLY a valid JSON object (no commentary after it).
+- Return ONLY valid JSON.
 - Output shape:
 {
   "entries": [
@@ -244,49 +340,24 @@ Rules:
   const userPrompt = `Audience:
 ${config.audience_description}
 
-Domains to research:
-${overrideDomains.join(", ")}
-
 Allowed keyword clusters:
 ${config.keyword_clusters.join(", ")}
 
 Avoid topics about:
 ${config.exclude_terms.join(", ")}
 
-Search the web for what is genuinely current in these domains, then create up to ${maxNewEntries} new content calendar entries grounded in what you found.`;
+Create up to ${maxNewEntries} new content calendar entries from these recent trend headlines:
+${JSON.stringify(promptPayload, null, 2)}`;
 
-  let completion = await anthropic.messages.create({
+  const completion = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 8192,
+    max_tokens: 4096,
     system: systemPrompt,
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }],
     messages: [{ role: "user", content: userPrompt }],
   });
 
-  // Server-side tool loops can pause at the iteration limit; resume up to 3 times.
-  let continuations = 0;
-  const conversation: Anthropic.MessageParam[] = [{ role: "user", content: userPrompt }];
-  while (completion.stop_reason === "pause_turn" && continuations < 3) {
-    conversation.push({ role: "assistant", content: completion.content });
-    completion = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      system: systemPrompt,
-      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }],
-      messages: conversation,
-    });
-    continuations++;
-  }
-
-  const searchesRun = completion.content.filter(
-    (block) => block.type === "server_tool_use"
-  ).length;
-
-  // The JSON payload is in the LAST text block (search results precede it).
-  const responseText = completion.content
-    .filter((block): block is Anthropic.TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("\n");
+  const responseText =
+    completion.content[0]?.type === "text" ? completion.content[0].text : "";
 
   let parsed: { entries?: CandidateEntry[] };
   try {
@@ -357,7 +428,7 @@ Search the web for what is genuinely current in these domains, then create up to
     } as Json,
     output_data: {
       run_id: runId,
-      trends_found: searchesRun,
+      trends_found: trendItems.length,
       new_entries: deduped.length,
       duplicates_skipped: duplicatesSkipped,
       publish_mode: publishMode,
@@ -369,7 +440,7 @@ Search the web for what is genuinely current in these domains, then create up to
     run_id: runId,
     publish_mode: publishMode,
     target_status: targetStatus,
-    trends_found: searchesRun,
+    trends_found: trendItems.length,
     new_entries: deduped.length,
     duplicates_skipped: duplicatesSkipped,
     entries: deduped,
