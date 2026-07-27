@@ -1,0 +1,40 @@
+name: Daily Article Publish
+
+on:
+  schedule:
+    # 07:00 UTC daily — writes the next APPROVED topic from the content calendar.
+    # Safe mode ON means the article lands as a draft for review, never auto-published.
+    # If no approved topics are queued, the run exits cleanly with a 404 (nothing to write).
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Write next approved article
+        env:
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+        run: |
+          TIMESTAMP="$(date +%s)"
+          BODY="{}"
+          SIGNING_INPUT="POST:/api/write-article:${TIMESTAMP}:${BODY}"
+          SIGNATURE="$(printf "%s" "${SIGNING_INPUT}" | openssl dgst -sha256 -hmac "${API_SECRET_KEY}" -hex | awk '{print $2}')"
+
+          HTTP_CODE=$(curl -sS -o /tmp/resp.json -w "%{http_code}" \
+            -X POST "${BACKEND_URL}/api/write-article" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${API_SECRET_KEY}" \
+            -H "x-timestamp: ${TIMESTAMP}" \
+            -H "x-signature: ${SIGNATURE}" \
+            --max-time 600 \
+            -d "${BODY}")
+
+          cat /tmp/resp.json
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "No approved topics in the calendar — nothing to write today."
+            exit 0
+          fi
+          [ "$HTTP_CODE" = "200" ] || exit 1
