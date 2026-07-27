@@ -1,0 +1,53 @@
+name: Operator Review
+
+# Your Operator's scheduled review: it reads the whole house (leads, funnel,
+# pipeline and content), files anything worth doing into your approvals
+# queue, and writes the report you read in /agent.
+#
+# COST: one review is roughly 50-100k tokens on YOUR api key. Weekly is the
+# default for that reason. To go daily, change the cron below to
+# '0 23 * * *' and set mode to "" (empty) in the body — and know that you're
+# choosing roughly 7x the monthly spend.
+
+on:
+  schedule:
+    # Sundays 23:00 UTC — i.e. Monday morning across Europe/Asia/Australia.
+    # Adjust the hour to land before you start your week in YOUR timezone.
+    - cron: '0 23 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'weekly (deep report) or blank for the daily morning review'
+        required: false
+        default: 'weekly'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Run the Operator review
+        env:
+          # Repo secret: the same API_SECRET_KEY as your backend .env / wrangler secret
+          API_SECRET_KEY: ${{ secrets.API_SECRET_KEY }}
+          # Repo variable: your deployed BACKEND worker URL, e.g. https://your-backend.workers.dev
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          MODE: ${{ github.event.inputs.mode || 'weekly' }}
+        run: |
+          TIMESTAMP="$(date +%s)"
+          if [ "${MODE}" = "weekly" ]; then
+            BODY='{"mode":"weekly"}'
+          else
+            BODY='{}'
+          fi
+          SIGNING_INPUT="POST:/api/agent/tick:${TIMESTAMP}:${BODY}"
+          SIGNATURE="$(printf "%s" "${SIGNING_INPUT}" | openssl dgst -sha256 -hmac "${API_SECRET_KEY}" -hex | awk '{print $2}')"
+
+          # A full review runs several minutes — give curl room before it gives up.
+          curl --fail-with-body -sS --max-time 900 \
+            -X POST "${BACKEND_URL}/api/agent/tick" \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${API_SECRET_KEY}" \
+            -H "x-timestamp: ${TIMESTAMP}" \
+            -H "x-signature: ${SIGNATURE}" \
+            -d "${BODY}"
