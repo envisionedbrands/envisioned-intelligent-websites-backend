@@ -1,8 +1,11 @@
 /**
- * GET /api/brand-context — audit view of the brand_context table.
+ * /api/brand-context — audit + maintenance surface for the brand_context table.
  *
- * Returns metadata + staleness flags per row (never full content), so brand
- * hygiene can be checked without dashboard access. Session or signed API auth.
+ * GET             → metadata + staleness flags per row (no content)
+ * GET ?key=X      → one full row (for backups before removal)
+ * DELETE ?key=X   → remove one row (deliberate single-key only, no bulk delete)
+ *
+ * Session or signed API auth.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,6 +17,19 @@ export async function GET(request: NextRequest) {
   if (!auth.authenticated) return unauthorizedResponse(auth.error);
 
   const supabase = createAdminClient();
+  const key = request.nextUrl.searchParams.get("key");
+
+  if (key) {
+    const { data, error } = await supabase
+      .from("brand_context")
+      .select("key, category, content, updated_at")
+      .eq("key", key)
+      .maybeSingle();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!data) return NextResponse.json({ error: "not found" }, { status: 404 });
+    return NextResponse.json(data);
+  }
+
   const { data, error } = await supabase
     .from("brand_context")
     .select("key, category, content, updated_at")
@@ -43,4 +59,25 @@ export async function GET(request: NextRequest) {
 
   const totalChars = rows.reduce((sum, r) => sum + r.chars, 0);
   return NextResponse.json({ total_rows: rows.length, total_chars: totalChars, rows });
+}
+
+export async function DELETE(request: NextRequest) {
+  const auth = await authenticateSessionOrApiKey(request);
+  if (!auth.authenticated) return unauthorizedResponse(auth.error);
+
+  const key = request.nextUrl.searchParams.get("key");
+  if (!key) return NextResponse.json({ error: "key query param required" }, { status: 400 });
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("brand_context")
+    .delete()
+    .eq("key", key)
+    .select("key");
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data || data.length === 0)
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  return NextResponse.json({ deleted: key });
 }
