@@ -320,6 +320,12 @@ Rules:
 - Avoid generic news rewrites.
 - Prefer ideas with a clear search angle.
 - Match keyword clusters where possible. Use "emerging" if none fit.
+- Write each "notes" field implication-first: 2-3 sentences that lead with what this
+  MEANS for the audience (not a restatement of the headline), include specific
+  numbers/data when the source carries them, and END with the source link from the
+  headline item in the form "Source: <url>".
+- No hype language ("revolutionary", "game-changing", "disrupting") — calm, specific,
+  practical framing only.
 - Return ONLY valid JSON.
 - Output shape:
 {
