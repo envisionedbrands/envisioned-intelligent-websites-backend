@@ -245,7 +245,7 @@ export function fmtDate(iso: string | null | undefined): string {
   });
 }
 
-export function fmtMoney(cents: number, currency = 'USD'): string {
+export function fmtMoney(cents: number, currency = 'EUR'): string {
   // Undefined locale → the viewer's own; the currency code drives the symbol.
   return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 0 }).format(
     (cents || 0) / 100
