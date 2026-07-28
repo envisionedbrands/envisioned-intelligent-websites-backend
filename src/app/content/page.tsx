@@ -52,7 +52,10 @@ type Article = {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BOARD_COLUMNS = ['planned', 'approved', 'writing', 'draft', 'published', 'archived'] as const;
+// 'ready' is a display-only column, not a DB status: it holds status=draft
+// entries pushed from the local writing system (created_by=local_push),
+// kept on hand until needed. Backend-written drafts stay in 'draft'.
+const BOARD_COLUMNS = ['planned', 'approved', 'writing', 'draft', 'ready', 'published', 'archived'] as const;
 
 const STATUS_DOT_COLORS: Record<string, string> = {
   planned: 'bg-minimal-muted',
@@ -453,8 +456,17 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
     setOverColumn(null);
   };
 
+  const isLocalPush = (e: CalendarEntry) => e.created_by === 'local_push';
+
   const grouped = BOARD_COLUMNS.reduce((acc, status) => {
-    const items = entries.filter((e) => e.status === status);
+    let items: CalendarEntry[];
+    if (status === 'ready') {
+      items = entries.filter((e) => e.status === 'draft' && isLocalPush(e));
+    } else if (status === 'draft') {
+      items = entries.filter((e) => e.status === 'draft' && !isLocalPush(e));
+    } else {
+      items = entries.filter((e) => e.status === status);
+    }
     if (status === 'published') {
       items.sort((a, b) => {
         const aTime = a.content_objects?.published_at || a.created_at;
