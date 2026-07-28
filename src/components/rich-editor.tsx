@@ -3,6 +3,7 @@
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
 import { useEffect } from 'react';
 
 type RichEditorProps = {
@@ -20,6 +21,9 @@ export function RichEditor({ content, onChange, editable = true }: RichEditorPro
       Link.configure({
         openOnClick: false,
         HTMLAttributes: { class: 'text-white underline underline-offset-2' },
+      }),
+      Image.configure({
+        HTMLAttributes: { class: 'rounded-sm max-w-full h-auto my-4' },
       }),
     ],
     content,
