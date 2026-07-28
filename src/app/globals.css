@@ -306,3 +306,24 @@ html.light {
   --color-status-planned: #8A7A68;
   --color-status-draft: #8A7A68;
 }
+
+/* Light mode: the prose-editor/article-preview rules above use hardcoded
+   dark-theme hex values, so they must be re-mapped here for readability */
+html.light .prose-editor h2,
+html.light .article-preview h1,
+html.light .article-preview h2 { color: #2A2724; }
+html.light .prose-editor h3,
+html.light .article-preview h3 { color: #3A3633; }
+html.light .prose-editor p,
+html.light .prose-editor ul,
+html.light .prose-editor ol,
+html.light .article-preview p,
+html.light .article-preview ul,
+html.light .article-preview ol { color: #3A3633; }
+html.light .prose-editor a,
+html.light .article-preview a { color: #1E1E1E; }
+html.light .prose-editor strong,
+html.light .article-preview strong { color: #2A2724; }
+html.light .prose-editor blockquote,
+html.light .article-preview blockquote { border-left-color: #C9C2B6; color: #6E665D; }
+html.light .prose-editor p.is-editor-empty:first-child::before { color: #C9C2B6; }
