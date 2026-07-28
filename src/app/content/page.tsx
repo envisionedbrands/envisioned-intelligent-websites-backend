@@ -388,6 +388,29 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
     } finally { setWriting(null); }
   };
 
+  // Rewrite a planned topic per a one-line instruction (AI revise, stays planned)
+  const reviseEntry = async (id: string, instruction: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/api/content-calendar/${id}/revise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ instruction }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Revise failed');
+        return false;
+      }
+      fetchEntries();
+      return true;
+    } catch (err) {
+      console.error(err);
+      alert('Revise failed — check console for details');
+      return false;
+    }
+  };
+
   // ─── Drag handlers ───
   const activeEntry = entries.find((e) => e.id === activeId);
 
@@ -481,6 +504,8 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
                   writing={writing}
                   publishing={publishing}
                   onApprove={() => updateStatus(entry.id, 'approved')}
+                  onReject={() => updateStatus(entry.id, 'archived')}
+                  onRevise={(instruction) => reviseEntry(entry.id, instruction)}
                   onWriteNow={() => writeNow(entry.id)}
                   onPublish={() => publishEntry(entry.id)}
                   onReset={() => resetStuck(entry.id)}
@@ -554,6 +579,8 @@ function DraggableCard({
   writing,
   publishing,
   onApprove,
+  onReject,
+  onRevise,
   onWriteNow,
   onPublish,
   onReset,
@@ -564,11 +591,16 @@ function DraggableCard({
   writing: string | null;
   publishing: string | null;
   onApprove: () => void;
+  onReject: () => void;
+  onRevise: (instruction: string) => Promise<boolean>;
   onWriteNow: () => void;
   onPublish: () => void;
   onReset: () => void;
   digitalHomeUrl: string;
 }) {
+  const [fixOpen, setFixOpen] = useState(false);
+  const [fixText, setFixText] = useState('');
+  const [fixBusy, setFixBusy] = useState(false);
   const canDrag = (VALID_MOVES[entry.status] || []).length > 0 && entry.status !== 'writing';
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: entry.id,
@@ -660,12 +692,30 @@ function DraggableCard({
             : 'opacity-0 group-hover:opacity-100'
         }`}>
           {entry.status === 'planned' && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onApprove(); }}
-              className="text-[10px] uppercase tracking-widest text-minimal-muted hover:text-white transition-colors"
-            >
-              Approve
-            </button>
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); onApprove(); }}
+                className="text-[10px] uppercase tracking-widest text-minimal-muted hover:text-white transition-colors"
+              >
+                Approve
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setFixOpen((v) => !v); }}
+                className={`text-[10px] uppercase tracking-widest transition-colors ${
+                  fixOpen ? 'text-yellow-500' : 'text-minimal-muted hover:text-yellow-500'
+                }`}
+                title="Rewrite this topic with an instruction"
+              >
+                Fix
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onReject(); }}
+                className="ml-auto text-[10px] uppercase tracking-widest text-minimal-muted hover:text-red-400 transition-colors"
+                title="No — archive this topic"
+              >
+                ✕ No
+              </button>
+            </>
           )}
           {entry.status === 'approved' && (
             <button
@@ -713,6 +763,40 @@ function DraggableCard({
                 View →
               </a>
             </>
+          )}
+        </div>
+      )}
+
+      {/* Fix — one-line instruction, AI rewrites the topic in place */}
+      {!isWriting && entry.status === 'planned' && fixOpen && (
+        <div
+          className="mt-3 flex items-center gap-2"
+          onPointerDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <input
+            type="text"
+            autoFocus
+            value={fixText}
+            disabled={fixBusy}
+            onChange={(e) => setFixText(e.target.value)}
+            onKeyDown={async (e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') { setFixOpen(false); setFixText(''); }
+              if (e.key === 'Enter' && fixText.trim() && !fixBusy) {
+                setFixBusy(true);
+                const ok = await onRevise(fixText.trim());
+                setFixBusy(false);
+                if (ok) { setFixOpen(false); setFixText(''); }
+              }
+            }}
+            placeholder="What should change? (Enter to rewrite)"
+            className="flex-1 min-w-0 bg-transparent border border-minimal-border rounded-sm px-2 py-1.5 text-[11px] placeholder:text-minimal-muted/50 focus:outline-none focus:border-minimal-muted disabled:opacity-50"
+          />
+          {fixBusy && (
+            <span className="text-[9px] uppercase tracking-widest text-yellow-500 animate-pulse shrink-0">
+              Rewriting…
+            </span>
           )}
         </div>
       )}
