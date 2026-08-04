@@ -1,7 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AdminClient } from "./types";
 
-export const CRM_AI_MODEL = "claude-sonnet-4-6";
+/**
+ * The copywriter model. Claude writes ALL email and marketing copy —
+ * sequences, rewrites, batches, single-email briefs. Copy quality is the
+ * moat; don't migrate this to save pennies.
+ */
+const DEFAULT_CRM_MODEL = "claude-sonnet-4-6";
+export const CRM_AI_MODEL = process.env.CRM_AI_MODEL || DEFAULT_CRM_MODEL;
+
+function crmModel(): string {
+  return process.env.CRM_AI_MODEL || DEFAULT_CRM_MODEL;
+}
 
 /** Loads the brand brain (brand_context rows) as one prompt-ready block. */
 export async function loadBrandContext(supabase: AdminClient): Promise<string> {
@@ -13,12 +23,6 @@ export async function loadBrandContext(supabase: AdminClient): Promise<string> {
     .join("\n\n");
 }
 
-/** Fallback CTA destination when an offer has no cta_url configured. */
-function contactFallback(): string {
-  const base = (process.env.DIGITAL_HOME_URL || process.env.NEXT_PUBLIC_DIGITAL_HOME_URL || "").replace(/\/$/, "");
-  return `${base}/contact`;
-}
-
 /** Loads active offers so sequences can point at real destinations. */
 export async function loadOffers(supabase: AdminClient): Promise<string> {
   const { data } = await supabase
@@ -26,7 +30,7 @@ export async function loadOffers(supabase: AdminClient): Promise<string> {
     .select("slug, name, tagline, description, price_display, benefits, cta_text, cta_url, who_its_for")
     .eq("status", "active")
     .order("position_in_ladder", { ascending: true, nullsFirst: false });
-  if (!data?.length) return `(no offers configured yet — use ${contactFallback()} as the CTA destination)`;
+  if (!data?.length) return "(no offers configured yet — use your website's contact page as the CTA destination)";
   return data
     .map(
       (o) =>
@@ -34,7 +38,7 @@ export async function loadOffers(supabase: AdminClient): Promise<string> {
         `  For: ${o.who_its_for || "n/a"}\n` +
         `  ${o.tagline || o.description || ""}\n` +
         `  Benefits: ${(o.benefits || []).join("; ")}\n` +
-        `  CTA: ${o.cta_url || contactFallback()}`
+        `  CTA: ${o.cta_url || "(no URL set — use the website contact page)"}`
     )
     .join("\n");
 }
@@ -115,13 +119,13 @@ export function repairJsonQuotes(text: string): string {
   return result.join("");
 }
 
-export async function callClaude(system: string, user: string, maxTokens = 8192): Promise<{ text: string; tokens: number }> {
+export async function callModel(system: string, user: string, maxTokens = 8192): Promise<{ text: string; tokens: number }> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY is not configured");
   }
   const anthropic = new Anthropic();
   const message = await anthropic.messages.create({
-    model: CRM_AI_MODEL,
+    model: crmModel(),
     max_tokens: maxTokens,
     system,
     messages: [{ role: "user", content: user }],
@@ -132,11 +136,11 @@ export async function callClaude(system: string, user: string, maxTokens = 8192)
 }
 
 /**
- * Structured generation via forced tool use — the API constrains the output
+ * Structured generation via forced tool call — the API constrains the output
  * to the given JSON schema, so long email copy can't break parsing (unescaped
  * quotes/newlines were breaking plain-text JSON output).
  */
-export async function callClaudeStructured<T>(
+export async function callModelStructured<T>(
   system: string,
   user: string,
   schema: Record<string, unknown>,
@@ -149,7 +153,7 @@ export async function callClaudeStructured<T>(
   // Stream + finalMessage: large maxTokens (long sequences) trips the SDK's
   // non-streaming 10-minute guard, and streaming avoids HTTP idle timeouts.
   const stream = anthropic.messages.stream({
-    model: CRM_AI_MODEL,
+    model: crmModel(),
     max_tokens: maxTokens,
     system,
     messages: [{ role: "user", content: user }],

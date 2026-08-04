@@ -22,6 +22,8 @@ export interface LeadInput {
 export interface UpsertResult {
   lead: Lead;
   created: boolean;
+  /** The lead's state BEFORE this upsert merged into it; undefined when created. */
+  previous?: Lead;
 }
 
 export function normalizeEmail(email: string): string {
@@ -170,5 +172,5 @@ export async function upsertLead(
     }
   }
 
-  return { lead, created };
+  return { lead, created, previous: created ? undefined : (existing as Lead) };
 }

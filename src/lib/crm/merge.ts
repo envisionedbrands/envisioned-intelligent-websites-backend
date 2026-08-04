@@ -9,7 +9,10 @@ import type { Lead } from "./types";
 const TAG_RE = /\{\{\s*([a-zA-Z0-9_.]+)\s*(?:\|([^}]*))?\s*\}\}/g;
 
 export function unsubscribeUrl(lead: Pick<Lead, "unsubscribe_token">): string {
-  const base = process.env.DIGITAL_HOME_URL || process.env.NEXT_PUBLIC_DIGITAL_HOME_URL || "";
+  const base =
+    process.env.DIGITAL_HOME_URL ||
+    process.env.NEXT_PUBLIC_DIGITAL_HOME_URL ||
+    "https://www.yourdomain.com";
   return `${base.replace(/\/$/, "")}/unsubscribe?t=${lead.unsubscribe_token}`;
 }
 

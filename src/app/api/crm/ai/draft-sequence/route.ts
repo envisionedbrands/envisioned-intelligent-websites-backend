@@ -21,7 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticateSessionOrApiKey, unauthorizedResponse } from "@/lib/api/auth";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
-  callClaudeStructured,
+  callModelStructured,
   loadBrandContext,
   loadOffers,
   repairJsonQuotes,
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
   const [brandContext, offers] = await Promise.all([loadBrandContext(supabase), loadOffers(supabase)]);
 
-  const system = `You are this brand's in-house lifecycle marketer. You write email nurture sequences that sound exactly like the brand — never like a template. You are given the brand brain (voice, positioning, pillars, audience) and the live offer list. You follow direct-response best practice without ever sounding like direct response.
+  const system = `You are the brand's in-house lifecycle marketer. You write email nurture sequences that sound exactly like the brand — never like a template. You are given the brand brain (voice, positioning, pillars, audience) and the live offer list. You follow direct-response best practice without ever sounding like direct response.
 ${SEQUENCE_CRAFT_RULES}
 Deliver the sequence with the deliver_result tool. "wait_before" is the delay BEFORE that email, relative to the previous one (first email usually 0 days).`;
 
@@ -111,7 +111,7 @@ Write a ${numEmails}-email nurture sequence and deliver it with the tool.`;
     // A full email is ~800-1,200 output tokens as JSON; the old 8k default
     // silently truncated anything past ~4 emails. Scale with the ask.
     const maxTokens = Math.min(32000, 6000 + numEmails * 4000);
-    const { result: rawDraft, tokens } = await callClaudeStructured<DraftSequence>(
+    const { result: rawDraft, tokens } = await callModelStructured<DraftSequence>(
       system,
       user,
       SEQUENCE_SCHEMA as unknown as Record<string, unknown>,

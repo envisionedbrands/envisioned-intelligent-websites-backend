@@ -24,20 +24,20 @@ export async function alertHotLeads(
       .single();
     if (!lead) continue;
 
-    // Dedupe on the lead timeline: one alert per lead per DEDUPE_DAYS.
+    // Dedupe on the activity trail: the alert logs a note when it fires, so a
+    // recent note means this lead already got its alert this window.
     const { data: recent } = await supabase
       .from("lead_activities")
       .select("id")
       .eq("lead_id", lead.id)
       .eq("activity_type", "note")
-      .ilike("title", `${ALERT_TITLE_PREFIX}%`)
+      .like("title", `${ALERT_TITLE_PREFIX}%`)
       .gte("created_at", new Date(Date.now() - DEDUPE_DAYS * 86_400_000).toISOString())
       .limit(1);
     if (recent?.length) continue;
 
     const name = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email;
 
-    // The timeline note doubles as the dedupe marker, so write it first.
     await logActivity(supabase, {
       lead_id: lead.id,
       activity_type: "note",
@@ -48,7 +48,7 @@ export async function alertHotLeads(
     await notifyOwner(
       supabase,
       `🔥 Hot lead: ${name} (score ${crossing.score})`,
-      `**${name}** (${lead.email}) just crossed the hot-lead threshold: score **${crossing.previous} → ${crossing.score}** (threshold ${HOT_THRESHOLD}).\n\n` +
+      `**${name}** (${lead.email}) just crossed the hot-lead threshold: score **${crossing.previous} → ${crossing.score}**.\n\n` +
         `Source: ${lead.source || "unknown"} · Tags: ${(lead.tags || []).join(", ") || "none"}\n\n` +
         `Worth a personal follow-up while they're warm.`
     );

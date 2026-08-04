@@ -9,7 +9,7 @@
  * The richer your capture forms, the better these emails get: every extra
  * question you ask on an opt-in lands in `custom` and becomes material here.
  */
-import { callClaudeStructured, loadOffers, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
+import { callModelStructured, loadOffers, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
 import { getCrmSettings } from "@/lib/crm/settings";
 import { routeOfferForLead } from "@/lib/crm/offers";
 import { BRAND_DIGEST } from "./prompt";
@@ -228,7 +228,7 @@ export async function draftPersonalizedBatch(
       wave.map(async (lead) => {
         const profile = leadProfile(lead);
         const route = await routeOfferForLead(supabase, lead);
-        const { result } = await callClaudeStructured<DraftedEmail>(
+        const { result } = await callModelStructured<DraftedEmail>(
           system,
           `Campaign intent: ${intent}\n\n## The lead\n${profile.block}\n\n` +
             `Recommended tier for this lead: ${route.tier} — ${route.reason}. ` +

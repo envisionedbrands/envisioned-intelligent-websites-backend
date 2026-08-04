@@ -24,6 +24,9 @@ type Dashboard = {
     open_tasks: number;
     open_opportunities: number;
     pipeline_value_cents: number;
+    won_total_cents: number;
+    won_this_month_cents: number;
+    won_deals: number;
   };
   upcoming_appointments: {
     id: string;
@@ -114,7 +117,12 @@ export default function CrmDashboard() {
     { label: 'New this week', value: String(c.new_this_week) },
     { label: 'In workflows', value: String(c.active_enrollments), href: '/crm/workflows' },
     { label: 'Emails · 7d', value: String(c.emails_7d) },
-    { label: 'Pipeline', value: fmtMoney(c.pipeline_value_cents), href: '/crm/pipeline' },
+    // Money made: deals the CRM closed.
+    {
+      label: 'Won by CRM',
+      value: `${fmtMoney(c.won_total_cents)}${c.won_this_month_cents ? ` · ${fmtMoney(c.won_this_month_cents)} this mo` : ''}`,
+      href: '/crm/pipeline',
+    },
     { label: 'Open tasks', value: String(c.open_tasks) },
   ];
 

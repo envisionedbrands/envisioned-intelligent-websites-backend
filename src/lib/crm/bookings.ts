@@ -245,16 +245,16 @@ const TEMPLATE_1H = "Booking reminder — 1 hour";
 const FALLBACK: Record<string, { subject: string; body: string }> = {
   [TEMPLATE_24H]: {
     subject: "Tomorrow: {{booking_title}}",
-    body: "Hey {{first_name|there}},\n\nQuick reminder that our call is booked for tomorrow: **{{booking_title}}**, {{booking_day}} at {{booking_time}}.\n\nJoin here when it's time: {{meeting_url}}\n\nNeed to change it? [Reschedule]({{reschedule_url}}) or [cancel]({{cancel_url}}) in one click.\n\nSee you there,\n{{sender_name}}",
+    body: "Hey {{first_name|there}},\n\nQuick reminder that our call is booked for tomorrow: **{{booking_title}}**, {{booking_day}} at {{booking_time}}.\n\nJoin here when it's time: {{meeting_url}}\n\nNeed to change it? [Reschedule]({{reschedule_url}}) or [cancel]({{cancel_url}}) in one click.\n\nSee you there!",
   },
   [TEMPLATE_1H]: {
     subject: "Starting soon: {{booking_title}} at {{booking_time}}",
-    body: "Hey {{first_name|there}},\n\nWe're on in about an hour — **{{booking_title}}** at {{booking_time}}.\n\nJoin link: {{meeting_url}}\n\nSee you soon,\n{{sender_name}}",
+    body: "Hey {{first_name|there}},\n\nWe're on in about an hour — **{{booking_title}}** at {{booking_time}}.\n\nJoin link: {{meeting_url}}\n\nSee you soon!",
   },
 };
 
 function fmtBookingDay(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-AU", {
     timeZone,
     weekday: "long",
     day: "numeric",
@@ -263,7 +263,7 @@ function fmtBookingDay(iso: string, timeZone: string): string {
 }
 
 function fmtBookingTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-AU", {
     timeZone,
     hour: "numeric",
     minute: "2-digit",
@@ -362,7 +362,7 @@ export async function sendBookingReminders(
     const tpl = templateByName.get(templateName);
     const subject = tpl?.subject || FALLBACK[templateName].subject;
     const bodyMd = tpl?.body_md || FALLBACK[templateName].body;
-    const extra = { ...bookingMergeValues(appt, lead), sender_name: settings.sender.from_name };
+    const extra = bookingMergeValues(appt, lead);
 
     try {
       const result = await sendCrmEmail(

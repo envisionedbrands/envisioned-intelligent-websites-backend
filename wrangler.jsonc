@@ -1,8 +1,22 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
+  // worker.ts wraps OpenNext's generated handler to add `scheduled` — see the
+  // file header. Reverting to ".open-next/worker.js" disables the cron and
+  // restores stock OpenNext behaviour.
+  "main": "worker.ts",
   "name": "envisioned-intelligent-websites-backend",
-  "compatibility_date": "2025-09-27",
+  // The CRM engine tick + social publish tick. Was a GitHub Action; GitHub
+  // throttles scheduled workflows, which stalls onboarding email.
+  // NOTE: .github/workflows/crm-tick.yml still exists and does the same job.
+  // Once this cron is confirmed firing, disable that workflow so the engine
+  // is not ticked twice.
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  // Keep the workers.dev URL alive; add a custom-domain route here when you
+  // claim one, e.g. { "pattern": "backend.yourdomain.com", "custom_domain": true }
+  "workers_dev": true,
+  "compatibility_date": "2026-05-01",
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -23,6 +37,16 @@
   "images": {
     "binding": "IMAGES"
   },
+  // Social media files (videos + carousel slides). Make the bucket public by
+  // attaching a custom domain (e.g. media.yourdomain.com) and set
+  // R2_PUBLIC_BASE below to match — Meta ingests by pulling that URL, and R2
+  // egress is free.
+  "r2_buckets": [
+    {
+      "binding": "SOCIAL_MEDIA",
+      "bucket_name": "social-media"
+    }
+  ],
   "observability": {
     "enabled": true
   },
@@ -36,6 +60,10 @@
     "DIGITAL_HOME_URL": "https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev",
     "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev",
     "API_SIGNATURE_REQUIRED": "true",
-    "API_REQUEST_SIGNATURE_TTL_SECONDS": "300"
+    "API_REQUEST_SIGNATURE_TTL_SECONDS": "300",
+    // R2 public base for social media assets. NOT yet claimed — social image
+    // and video publishing will fail until this points at a real public
+    // domain attached to the SOCIAL_MEDIA bucket.
+    "R2_PUBLIC_BASE": "https://media.yourdomain.com"
   }
 }

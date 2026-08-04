@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
     upcomingAppointments,
     recentActivities,
     openOpps,
+    wonOpps,
   ] = await Promise.all([
     supabase.from("leads").select("id", { count: "exact", head: true }),
     supabase.from("leads").select("id", { count: "exact", head: true }).gte("created_at", weekAgo),
@@ -47,9 +48,24 @@ export async function GET(request: NextRequest) {
       .from("opportunities")
       .select("value_cents", { count: "exact" })
       .eq("status", "open"),
+    supabase
+      .from("opportunities")
+      .select("value_cents, won_at")
+      .eq("status", "won")
+      .limit(2000),
   ]);
 
   const pipelineValueCents = (openOpps.data || []).reduce((sum, o) => sum + (o.value_cents || 0), 0);
+
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  let wonTotalCents = 0;
+  let wonMonthCents = 0;
+  for (const o of wonOpps.data || []) {
+    wonTotalCents += o.value_cents || 0;
+    if (o.won_at && new Date(o.won_at) >= monthStart) wonMonthCents += o.value_cents || 0;
+  }
 
   return NextResponse.json({
     counts: {
@@ -60,6 +76,9 @@ export async function GET(request: NextRequest) {
       open_tasks: openTasks.count || 0,
       open_opportunities: openOpps.count || 0,
       pipeline_value_cents: pipelineValueCents,
+      won_total_cents: wonTotalCents,
+      won_this_month_cents: wonMonthCents,
+      won_deals: (wonOpps.data || []).length,
     },
     upcoming_appointments: upcomingAppointments.data || [],
     recent_activities: recentActivities.data || [],

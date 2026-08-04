@@ -6,6 +6,7 @@ import { recomputeLeadScores } from "./scoring";
 import { alertHotLeads } from "./alerts";
 import { promoteSubjectTests } from "./abtest";
 import { sendBookingReminders } from "./bookings";
+import { runHealthChecks } from "./health";
 import type {
   AdminClient,
   CrmSettings,
@@ -22,6 +23,9 @@ import type { Json } from "@/types/database";
 const MAX_STEPS_PER_TICK = 25; // per enrollment — guards against runaway loops
 const MAX_ATTEMPTS = 5;
 const RETRY_DELAY_MS = 30 * 60 * 1000;
+// How long a tick holds an enrollment while processing it. Long enough to
+// cover a slow step, short enough that a crashed tick frees the row quickly.
+const LEASE_MINUTES = 10;
 
 export interface TickSummary {
   due: number;
@@ -29,6 +33,13 @@ export interface TickSummary {
   emails_sent: number;
   emails_simulated: number;
   emails_suppressed: number;
+  emails_deferred_budget: number;
+  emails_deferred_quota: number; // provider refused on volume; parked until the next UTC day
+  emails_exempt: number; // activation-critical sends that bypassed a zero budget / tripped breaker
+  skipped_locked: number; // due rows another concurrent tick had already claimed
+  health_alerts: string[]; // pipeline problems detected this tick (empty = healthy)
+  budget_remaining: number | null; // null when the budget is disabled
+  breaker_tripped: { bounce_rate: number; complaint_rate: number; sends_24h: number } | null;
   failed: number;
   errors: string[];
   scores_updated: number;
@@ -139,7 +150,7 @@ export async function enrollLead(
 // ── Sales pipeline auto-population ────────────────────────────────────────────
 
 /**
- * Auto-population is on by default. Turn it off (both the capture→New and
+ * Auto-population is on by default. Stop it (both the capture→New and
  * enroll→Nurturing hooks) by setting backend_settings.crm_auto_pipeline=false.
  */
 async function isAutoPipelineOn(supabase: AdminClient): Promise<boolean> {
@@ -264,6 +275,13 @@ function isWithinWindow(date: Date, window: SendWindow): boolean {
 }
 
 /** Returns null if sending is allowed now, else the next allowed Date. */
+// Resend's daily quota resets at UTC midnight, so the budget day matches.
+function nextUtcMidnight(from: Date): Date {
+  const next = new Date(from);
+  next.setUTCHours(24, 0, 0, 0);
+  return next;
+}
+
 export function nextAllowedSendTime(window: SendWindow | undefined, from: Date): Date | null {
   if (!window?.enabled) return null;
   if (isWithinWindow(from, window)) return null;
@@ -309,6 +327,36 @@ async function executeStep(
       const deferTo = nextAllowedSendTime(settings.send_window, new Date());
       if (deferTo) return { advance: false, deferUntil: deferTo };
 
+      // Reputation guard: daily + per-tick send budget. Defer without
+      // advancing (same contract as the send window) — nothing fails,
+      // the step just waits for headroom.
+      //
+      // Activation-critical workflows are exempt: the guard is global, so
+      // without this one bad bulk campaign parks onboarding too (see
+      // exempt_workflow_ids in settings.ts). Exempt sends still decrement the
+      // budget and still respect the send window — they just aren't the ones
+      // that get starved when headroom runs out.
+      const budget = settings.send_budget;
+      const exempt = (budget.exempt_workflow_ids || []).includes(workflow.id);
+      if (budget.enabled && !exempt) {
+        if (summary.budget_remaining !== null && summary.budget_remaining <= 0) {
+          summary.emails_deferred_budget++;
+          return { advance: false, deferUntil: nextUtcMidnight(new Date()) };
+        }
+        if (summary.emails_sent >= budget.per_tick_limit) {
+          summary.emails_deferred_budget++;
+          return { advance: false, deferUntil: new Date(Date.now() + 15 * 60_000) };
+        }
+      }
+      if (
+        exempt &&
+        budget.enabled &&
+        ((summary.budget_remaining !== null && summary.budget_remaining <= 0) ||
+          summary.emails_sent >= budget.per_tick_limit)
+      ) {
+        summary.emails_exempt++;
+      }
+
       let subject = String(cfg.subject || "");
       let bodyMd = String(cfg.body_md || "");
       let preheader = (cfg.preheader as string) || null;
@@ -351,10 +399,24 @@ async function executeStep(
         },
         settings
       );
-      if (result.status === "sent") summary.emails_sent++;
+      if (result.status === "sent") {
+        summary.emails_sent++;
+        if (summary.budget_remaining !== null) summary.budget_remaining--;
+      }
       if (result.status === "simulated") summary.emails_simulated++;
       if (result.status === "suppressed") summary.emails_suppressed++;
-      if (result.status === "failed") throw new Error(`send_email failed: ${result.error}`);
+      if (result.status === "failed") {
+        // Provider refused on volume (quota/rate limit): stop sending for the
+        // rest of this tick and park the enrollment until the provider's
+        // window resets. No attempt is counted and no retry loop spins —
+        // hammering a closed door is what burned Jul 20's 559 junk attempts.
+        if (/quota|rate limit|too many requests/i.test(String(result.error || ""))) {
+          summary.budget_remaining = 0;
+          summary.emails_deferred_quota++;
+          return { advance: false, deferUntil: nextUtcMidnight(new Date()) };
+        }
+        throw new Error(`send_email failed: ${result.error}`);
+      }
       return { advance: true };
     }
 
@@ -668,6 +730,13 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
     emails_sent: 0,
     emails_simulated: 0,
     emails_suppressed: 0,
+    emails_deferred_budget: 0,
+    emails_deferred_quota: 0,
+    emails_exempt: 0,
+    skipped_locked: 0,
+    health_alerts: [],
+    budget_remaining: null,
+    breaker_tripped: null,
     failed: 0,
     errors: [],
     scores_updated: 0,
@@ -677,6 +746,68 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
   };
 
   const settings = await getCrmSettings(supabase);
+
+  // Compute today's remaining send budget from what actually reached the
+  // provider (simulated/suppressed/failed sends never consumed reputation).
+  if (settings.send_budget.enabled) {
+    const startOfUtcDay = new Date().toISOString().slice(0, 10) + "T00:00:00Z";
+    const { count, error: budgetError } = await supabase
+      .from("email_sends")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", startOfUtcDay)
+      .not("status", "in", "(failed,simulated,suppressed)");
+    if (budgetError || count === null) {
+      // Can't verify usage — allow at most one tick's worth rather than
+      // stalling email entirely or running unmetered.
+      summary.errors.push(`send budget count: ${budgetError?.message || "no count returned"}`);
+      summary.budget_remaining = settings.send_budget.per_tick_limit;
+    } else {
+      summary.budget_remaining = Math.max(0, settings.send_budget.daily_limit - count);
+    }
+  }
+
+  // Circuit breaker (reactivation plan): pause all sends while the rolling-24h
+  // bounce or complaint rate is over threshold. Re-evaluated every tick, so it
+  // auto-resumes once the bad batch ages out of the window.
+  if (settings.send_budget.enabled) {
+    const since = new Date(Date.now() - 24 * 3_600_000).toISOString();
+    const [sends24, bounces24, complaints24] = await Promise.all([
+      supabase
+        .from("email_sends")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", since)
+        .not("status", "in", "(failed,simulated,suppressed)"),
+      supabase
+        .from("email_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "bounced")
+        .gte("created_at", since),
+      supabase
+        .from("email_events")
+        .select("id", { count: "exact", head: true })
+        .eq("event_type", "complained")
+        .gte("created_at", since),
+    ]);
+    const sends = sends24.count ?? 0;
+    if (sends >= settings.send_budget.breaker_min_sends) {
+      const bounceRate = (bounces24.count ?? 0) / sends;
+      const complaintRate = (complaints24.count ?? 0) / sends;
+      if (
+        bounceRate > settings.send_budget.max_bounce_rate ||
+        complaintRate > settings.send_budget.max_complaint_rate
+      ) {
+        summary.breaker_tripped = {
+          bounce_rate: bounceRate,
+          complaint_rate: complaintRate,
+          sends_24h: sends,
+        };
+        summary.budget_remaining = 0;
+        summary.errors.push(
+          `circuit breaker: last 24h bounce ${(bounceRate * 100).toFixed(1)}% / complaint ${(complaintRate * 100).toFixed(2)}% over ${sends} sends — all sends paused this tick`
+        );
+      }
+    }
+  }
 
   const { data: due, error } = await supabase
     .from("workflow_enrollments")
@@ -694,6 +825,28 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
   summary.due = due?.length || 0;
 
   for (const enrollment of due || []) {
+    // Claim the row before touching it. Two ticks running at once both SELECT
+    // the same due enrollments, and without this both send — that is exactly
+    // what happened on 2026-07-27 when two manual dispatches landed 22s apart
+    // and two members received the same email twice.
+    //
+    // The compare-and-swap on next_run_at is the lock: PostgreSQL takes a row
+    // lock for the UPDATE and re-checks the value we read, so only one tick can
+    // win. The loser sees 0 rows and skips. If a tick dies mid-enrollment the
+    // lease simply expires and the next tick picks it up.
+    const lease = new Date(Date.now() + LEASE_MINUTES * 60_000).toISOString();
+    const { data: claimed } = await supabase
+      .from("workflow_enrollments")
+      .update({ next_run_at: lease })
+      .eq("id", enrollment.id)
+      .eq("next_run_at", enrollment.next_run_at)
+      .eq("status", "active")
+      .select("id");
+    if (!claimed?.length) {
+      summary.skipped_locked++;
+      continue;
+    }
+
     await processEnrollment(
       supabase,
       enrollment as unknown as Enrollment & { workflows: Workflow | null; leads: Lead | null },
@@ -731,6 +884,17 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
     summary.errors.push(...reminders.errors.map((e) => `booking reminder: ${e}`));
   } catch (e) {
     summary.errors.push(`booking reminders: ${e instanceof Error ? e.message : "unknown error"}`);
+  }
+
+  // Pipeline health: the last line of defence. A tripped breaker parks every
+  // enrollment while clearing last_error, so without this nothing anywhere
+  // reports a fault — that is how a five-day send outage went unnoticed.
+  // Never let a health-check hiccup fail the tick itself.
+  try {
+    const health = await runHealthChecks(supabase, settings, summary.breaker_tripped);
+    summary.health_alerts = health.alerts.map((a) => a.key);
+  } catch (e) {
+    summary.errors.push(`health checks: ${e instanceof Error ? e.message : "unknown error"}`);
   }
 
   if (summary.due > 0) {

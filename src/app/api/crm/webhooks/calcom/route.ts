@@ -2,7 +2,7 @@
  * POST /api/crm/webhooks/calcom — Cal.com booking events.
  *
  * Configure in Cal.com: Settings → Developer → Webhooks → new webhook with
- * subscriber URL https://<your-backend-domain>/api/crm/webhooks/calcom,
+ * subscriber URL https://backend.yourdomain.com/api/crm/webhooks/calcom,
  * events BOOKING_CREATED + BOOKING_RESCHEDULED + BOOKING_CANCELLED, and the
  * same secret as `wrangler secret put CALCOM_WEBHOOK_SECRET`.
  *

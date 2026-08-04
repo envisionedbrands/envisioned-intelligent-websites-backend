@@ -2,7 +2,7 @@
 
 ## First Time Setup
 
-If you just cloned this repo, follow these steps in order. You need both this repo (Backend) and the [Digital Home Frontend Starter](https://github.com/lukesbrave/digital-home-frontend-starter) repo. **Set up the Frontend first** — it has the shared website migrations.
+If you just cloned this repo, follow these steps in order. You need both this repo (Backend) and the [Digital Home Frontend](https://github.com/lukesbrave/digital-home-frontend) repo. **Set up the Frontend first** — it has the shared website migrations.
 
 ### Recommended Setup Flow
 
@@ -14,7 +14,7 @@ If you just cloned this repo, follow these steps in order. You need both this re
 
 Using a separate chat for each repo helps Claude stay in the correct project context and avoids confusion between frontend and backend files, migrations, and environment variables.
 
-Before continuing backend setup, confirm Claude is working inside `digital-home-backend-starter` and using the same Supabase project as the Frontend.
+Before continuing backend setup, confirm Claude is working inside `digital-home-backend` and using the same Supabase project as the Frontend.
 
 ### Step 0: Check for Node.js
 Before anything else, check if the user has Node.js installed by running `node -v`. If the command fails or is not found, walk them through installing it: go to [nodejs.org](https://nodejs.org), download the LTS version, and run the installer. They need Node.js to run this project.
@@ -41,7 +41,8 @@ Fill in:
 - `API_SIGNATURE_REQUIRED` — keep `true` unless you intentionally need unsigned machine requests during a migration
 - `API_REQUEST_SIGNATURE_TTL_SECONDS` — optional request age limit for signed API calls (default `300`)
 - `ANTHROPIC_API_KEY` — from [console.anthropic.com](https://console.anthropic.com) (for AI article writing)
-- `OPENAI_API_KEY` — from [platform.openai.com](https://platform.openai.com) (for DALL-E hero images, optional)
+- `OPENAI_API_KEY` — from [platform.openai.com](https://platform.openai.com) (for OpenAI image-model hero images, optional)
+- `OPENAI_IMAGE_MODEL` — optional; defaults to `gpt-image-1`
 
 ### Step 3: Seed Your Brand Context
 Your brand context is what makes the AI write in your voice. First, fill in your content corpus files (see the Frontend's `content-corpus-examples/` for the format). Then seed them into Supabase either:
@@ -67,7 +68,7 @@ key: author
 content: [Your Name]
 ```
 
-**Image Style** — controls the AI-generated hero images for articles (uses DALL-E):
+**Image Style** — controls the AI-generated hero images for articles (uses the configured OpenAI image model):
 ```
 category: content
 key: image_style
@@ -235,7 +236,7 @@ The Backend connects to the same Supabase database as the Digital Home Frontend 
 
 ## Project Structure
 ```
-  /digital-home-backend-starter/
+  /digital-home-backend/
   CLAUDE.md              ← You are here
   /src
     /app
@@ -271,7 +272,8 @@ SUPABASE_ANON_KEY             — Duplicate of anon key for server-side access (
 SUPABASE_URL                  — Duplicate of Supabase URL for server-side access (same reason)
 API_SECRET_KEY                — Shared secret between Frontend and Backend (must match both)
 ANTHROPIC_API_KEY             — Anthropic API key for AI article writing
-OPENAI_API_KEY                — OpenAI API key for DALL-E hero images
+OPENAI_API_KEY                — OpenAI API key for hero images
+OPENAI_IMAGE_MODEL            — Optional image model override (defaults to gpt-image-1)
 DIGITAL_HOME_URL              — The public-facing Digital Home URL (e.g., https://yourdomain.com)
 ```
 

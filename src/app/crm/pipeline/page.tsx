@@ -112,13 +112,15 @@ export default function PipelinePage() {
 
   const open = opps.filter((o) => o.status === 'open');
   const totalValue = open.reduce((s, o) => s + o.value_cents, 0);
+  const won = opps.filter((o) => o.status === 'won');
+  const wonValue = won.reduce((s, o) => s + o.value_cents, 0);
 
   return (
     <div className="flex flex-col h-full">
       {toastNode}
       <PageHeader title={`Pipeline · ${pipeline?.name || ''}`}>
         <span className="text-xs text-minimal-muted">
-          {open.length} open · {fmtMoney(totalValue)}
+          {open.length} open · {fmtMoney(totalValue)} — {won.length} won · {fmtMoney(wonValue)}
         </span>
       </PageHeader>
 
@@ -340,7 +342,7 @@ function AddOppModal({
             ))}
           </div>
         )}
-        <Field label="Deal value" hint="Optional — shows on the board and dashboard totals">
+        <Field label="Deal value (AUD)" hint="Optional — shows on the board and dashboard totals">
           <TextInput type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" />
         </Field>
         <div className="flex justify-end gap-3">

@@ -22,23 +22,41 @@ export async function api<T = Record<string, unknown>>(path: string, init?: Requ
 
 // ── toasts ───────────────────────────────────────────────────────────────────
 
+let toastSeq = 0;
+
+/**
+ * Toasts live bottom-right on a solid surface so they never sit over page
+ * controls (the header actions are top-right) and never show content through
+ * themselves. They stack (newest at the bottom), auto-dismiss — errors hang
+ * around longer — and a click dismisses early.
+ */
 export function useToast() {
-  const [toast, setToast] = useState<{ text: string; kind: 'ok' | 'err' } | null>(null);
+  const [toasts, setToasts] = useState<Array<{ id: number; text: string; kind: 'ok' | 'err' }>>([]);
   const show = useCallback((text: string, kind: 'ok' | 'err' = 'ok') => {
-    setToast({ text, kind });
-    setTimeout(() => setToast(null), kind === 'err' ? 5000 : 2600);
+    const id = ++toastSeq;
+    setToasts((prev) => [...prev.slice(-2), { id, text, kind }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, kind === 'err' ? 6000 : 3200);
   }, []);
-  const node = toast ? (
-    <div className="fixed top-6 right-6 z-[100] toast-enter">
-      <div
-        className={`px-5 py-3 border rounded-lg text-[13px] font-medium ${
-          toast.kind === 'ok'
-            ? 'border-green-500/30 bg-green-500/10 text-green-400'
-            : 'border-red-500/30 bg-red-500/10 text-red-400'
-        }`}
-      >
-        {toast.text}
-      </div>
+  const node = toasts.length ? (
+    <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-2">
+      {toasts.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          title="Dismiss"
+          onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+          className="toast-enter-up flex items-start gap-2.5 pl-4 pr-5 py-3 rounded-lg border border-minimal-border bg-minimal-bg shadow-xl text-[13px] font-medium text-left max-w-sm cursor-pointer"
+        >
+          <span
+            className={`mt-[5px] w-2 h-2 rounded-full shrink-0 ${
+              t.kind === 'ok' ? 'bg-green-500' : 'bg-red-500'
+            }`}
+          />
+          <span className={t.kind === 'ok' ? 'text-green-500' : 'text-red-400'}>{t.text}</span>
+        </button>
+      ))}
     </div>
   ) : null;
   return { show, node };
@@ -162,17 +180,20 @@ export function GhostBtn({
   onClick,
   disabled,
   danger,
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   danger?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={`text-[13px] font-medium px-3.5 py-2 border rounded-lg transition-colors disabled:opacity-40 ${
         danger
           ? 'border-red-500/30 text-red-400 hover:bg-red-500/10'

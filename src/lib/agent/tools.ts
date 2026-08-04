@@ -12,7 +12,7 @@ import { getFunnelStats } from "@/lib/crm/funnel";
 import { getCrmSettings } from "@/lib/crm/settings";
 import { fireTrigger } from "@/lib/crm/engine";
 import { routeOfferForLead } from "@/lib/crm/offers";
-import { callClaudeStructured, loadBrandContext, REWRITE_SCHEMA, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
+import { callModelStructured, loadBrandContext, REWRITE_SCHEMA, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
 import { getContentAttribution } from "@/lib/crm/attribution";
 import { draftPersonalizedBatch } from "./batch";
 import type { Json, Tables } from "@/types/database";
@@ -1011,7 +1011,7 @@ const executors: Record<string, Executor> = {
         `\nBrief from the orchestrator: ${brief}\n` +
         (subject ? `Subject hint (improve it if you can do better): ${subject}\n` : "") +
         `\nReturn subject, preheader and body_md.`;
-      const { result } = await callClaudeStructured<{
+      const { result } = await callModelStructured<{
         subject: string;
         preheader?: string;
         body_md: string;

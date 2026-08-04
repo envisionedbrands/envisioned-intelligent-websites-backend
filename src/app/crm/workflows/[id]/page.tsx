@@ -791,7 +791,7 @@ function EmailStepEditor({
         {templateId && (
           <div className="flex items-center gap-2">
             <TextInput
-              placeholder="you@example.com"
+              placeholder="you@yourdomain.com"
               value={testTo}
               onChange={(e) => setTestTo(e.target.value)}
               className="w-52"

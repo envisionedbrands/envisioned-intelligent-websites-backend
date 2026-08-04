@@ -1059,6 +1059,256 @@ export type Database = {
         };
         Relationships: [];
       };
+      social_accounts: {
+        Row: {
+          id: string;
+          platform: "instagram" | "facebook" | "youtube";
+          external_id: string;
+          name: string;
+          username: string | null;
+          access_token: string | null;
+          refresh_token: string | null;
+          token_expires_at: string | null;
+          status: "active" | "error" | "disconnected";
+          metadata: Json;
+          connected_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          platform: "instagram" | "facebook" | "youtube";
+          external_id: string;
+          name: string;
+          username?: string | null;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          status?: "active" | "error" | "disconnected";
+          metadata?: Json;
+          connected_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          platform?: "instagram" | "facebook" | "youtube";
+          external_id?: string;
+          name?: string;
+          username?: string | null;
+          access_token?: string | null;
+          refresh_token?: string | null;
+          token_expires_at?: string | null;
+          status?: "active" | "error" | "disconnected";
+          metadata?: Json;
+          connected_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      social_posts: {
+        Row: {
+          id: string;
+          title: string | null;
+          caption: string;
+          video_path: string | null;
+          video_url: string | null;
+          thumbnail_url: string | null;
+          post_type: "video" | "carousel";
+          status: "draft" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "canceled";
+          scheduled_at: string | null;
+          published_at: string | null;
+          created_by: string;
+          error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title?: string | null;
+          caption?: string;
+          video_path?: string | null;
+          video_url?: string | null;
+          thumbnail_url?: string | null;
+          post_type?: "video" | "carousel";
+          status?: "draft" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "canceled";
+          scheduled_at?: string | null;
+          published_at?: string | null;
+          created_by?: string;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string | null;
+          caption?: string;
+          video_path?: string | null;
+          video_url?: string | null;
+          thumbnail_url?: string | null;
+          post_type?: "video" | "carousel";
+          status?: "draft" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "canceled";
+          scheduled_at?: string | null;
+          published_at?: string | null;
+          created_by?: string;
+          error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      social_post_media: {
+        Row: {
+          id: string;
+          post_id: string;
+          position: number;
+          kind: "image" | "video";
+          path: string | null;
+          url: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          position?: number;
+          kind?: "image" | "video";
+          path?: string | null;
+          url: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          position?: number;
+          kind?: "image" | "video";
+          path?: string | null;
+          url?: string;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "social_post_media_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "social_posts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      social_post_targets: {
+        Row: {
+          id: string;
+          post_id: string;
+          account_id: string;
+          platform: "instagram" | "facebook" | "youtube";
+          status: "pending" | "publishing" | "processing" | "published" | "failed" | "skipped";
+          caption_override: string | null;
+          external_id: string | null;
+          external_url: string | null;
+          platform_ref: Json;
+          error: string | null;
+          attempts: number;
+          published_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          post_id: string;
+          account_id: string;
+          platform: "instagram" | "facebook" | "youtube";
+          status?: "pending" | "publishing" | "processing" | "published" | "failed" | "skipped";
+          caption_override?: string | null;
+          external_id?: string | null;
+          external_url?: string | null;
+          platform_ref?: Json;
+          error?: string | null;
+          attempts?: number;
+          published_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          post_id?: string;
+          account_id?: string;
+          platform?: "instagram" | "facebook" | "youtube";
+          status?: "pending" | "publishing" | "processing" | "published" | "failed" | "skipped";
+          caption_override?: string | null;
+          external_id?: string | null;
+          external_url?: string | null;
+          platform_ref?: Json;
+          error?: string | null;
+          attempts?: number;
+          published_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "social_post_targets_post_id_fkey";
+            columns: ["post_id"];
+            isOneToOne: false;
+            referencedRelation: "social_posts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "social_post_targets_account_id_fkey";
+            columns: ["account_id"];
+            isOneToOne: false;
+            referencedRelation: "social_accounts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      social_metrics: {
+        Row: {
+          id: string;
+          target_id: string;
+          captured_at: string;
+          views: number;
+          likes: number;
+          comments: number;
+          shares: number;
+          saves: number;
+          reach: number;
+          raw: Json;
+        };
+        Insert: {
+          id?: string;
+          target_id: string;
+          captured_at?: string;
+          views?: number;
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          saves?: number;
+          reach?: number;
+          raw?: Json;
+        };
+        Update: {
+          id?: string;
+          target_id?: string;
+          captured_at?: string;
+          views?: number;
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          saves?: number;
+          reach?: number;
+          raw?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "social_metrics_target_id_fkey";
+            columns: ["target_id"];
+            isOneToOne: false;
+            referencedRelation: "social_post_targets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       crm_custom_fields: {
         Row: {
           id: string;

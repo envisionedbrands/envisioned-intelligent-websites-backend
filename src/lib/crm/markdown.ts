@@ -63,17 +63,11 @@ ${body}
 <div style="margin-top:40px;padding-top:20px;border-top:1px solid #eaeaea;font-size:12px;line-height:1.6;color:#999999;">
 <div>${escapeHtml(opts.sender.from_name)}</div>
 ${addressHtml}
-<div style="margin-top:6px;">You're receiving this because you subscribed at ${escapeHtml(siteHost())}. <a href="${opts.unsubscribeUrl}" style="color:#999999;text-decoration:underline;">Unsubscribe</a></div>
+<div style="margin-top:6px;">You're receiving this because you subscribed on our website. <a href="${opts.unsubscribeUrl}" style="color:#999999;text-decoration:underline;">Unsubscribe</a></div>
 </div>
 </div>
 </body>
 </html>`;
-}
-
-/** The site's bare hostname, for the compliance footer. */
-function siteHost(): string {
-  const base = process.env.DIGITAL_HOME_URL || process.env.NEXT_PUBLIC_DIGITAL_HOME_URL || "";
-  return base.replace(/^https?:\/\//, "").replace(/\/.*$/, "") || "our website";
 }
 
 function escapeHtml(s: string): string {

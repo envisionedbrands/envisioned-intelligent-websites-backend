@@ -48,12 +48,18 @@ export async function sendCrmEmail(
     ...(input.variant ? { variant: input.variant } : {}),
   };
 
-  // Suppression: never email anyone who isn't subscribed
-  if (lead.email_status !== "subscribed") {
+  // Suppression: never email anyone who isn't subscribed, or who carries a
+  // suppression tag. The tag check matters because tagging is how a list gets
+  // retired by hand — before 2026-07-27 only email_status was consulted, so a
+  // list tagged `suppressed-dead-list` kept sending and kept hard-bouncing
+  // until the bounces tripped the breaker and froze every workflow.
+  const suppressTag = (lead.tags || []).find((t) => (cfg.send_budget.suppress_tags || []).includes(t));
+  if (lead.email_status !== "subscribed" || suppressTag) {
+    const reason = suppressTag ? `suppressed by tag "${suppressTag}"` : `email_status is ${lead.email_status}`;
     await supabase.from("email_sends").insert({
       ...baseRow,
       status: "suppressed",
-      error_message: `email_status is ${lead.email_status}`,
+      error_message: reason,
     });
     return { status: "suppressed" };
   }

@@ -48,10 +48,30 @@ export interface CrmSender {
   address?: string; // physical address for the email footer (CAN-SPAM)
 }
 
+export interface SendBudget {
+  enabled: boolean;
+  daily_limit: number; // max emails accepted per UTC day across all workflows
+  per_tick_limit: number; // max emails per engine tick — smooths bursts within the day
+  max_bounce_rate: number; // circuit breaker: pause sends when rolling-24h bounce rate exceeds this (0–1)
+  max_complaint_rate: number; // circuit breaker: pause sends when rolling-24h complaint rate exceeds this (0–1)
+  breaker_min_sends: number; // breaker only arms once this many sends landed in the window
+  // Activation-critical workflows the daily cap and the breaker must never
+  // pause. These still count against the budget and still respect the send
+  // window — they just don't get parked when a bulk campaign misbehaves.
+  exempt_workflow_ids: string[];
+  // Lead tags that make an address unsendable. Until 2026-07-27 the
+  // `suppressed-dead-list` tag was decorative — the sender only ever checked
+  // email_status — so a list marked "suppressed" kept being mailed and kept
+  // hard-bouncing. Tagging is the obvious way to retire a list, so the tag
+  // now has to actually do it.
+  suppress_tags: string[];
+}
+
 export interface CrmSettings {
   safe_mode: boolean;
   sender: CrmSender;
   send_window: SendWindow;
+  send_budget: SendBudget;
   capture_key: string | null;
   funnel_secret: string | null;
 }

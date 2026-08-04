@@ -8,7 +8,7 @@
  *
  * Records the reply on the lead's timeline (activity_type 'email_reply' — a
  * +20 scoring signal), bumps new leads to 'engaged', and leaves drafting the
- * response to the Operator, who sees replies via list_recent_replies.
+ * response to a human or agent.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";

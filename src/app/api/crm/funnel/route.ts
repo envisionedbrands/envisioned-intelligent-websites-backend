@@ -1,9 +1,9 @@
 /**
  * GET /api/crm/funnel — funnel drop-off stats for the dashboard (and agents).
  *
- * Query: ?funnel=default&days=30   (days=0 → all time)
+ * Query: ?funnel=my-funnel&days=30   (days=0 → all time)
  *
- * Aggregation lives in @/lib/crm/funnel so other callers can reuse it.
+ * Aggregation lives in @/lib/crm/funnel so agents and the dashboard share it.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateSessionOrApiKey, unauthorizedResponse } from "@/lib/api/auth";

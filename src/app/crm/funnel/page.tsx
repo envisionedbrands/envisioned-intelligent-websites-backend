@@ -15,8 +15,8 @@ type FunnelStats = {
   truncated: boolean;
 };
 
-// Friendly labels for the quiz screens (mirrors lib/screens.ts in the quiz repo).
-// Unknown ids fall back to the raw screen_id so new funnels/screens still render.
+// Friendly labels for common funnel screen ids. Unknown ids fall back to the
+// raw screen_id so any funnel/screen still renders.
 const SCREEN_LABELS: Record<string, string> = {
   hook: 'Welcome (hook)',
   identity: 'Q1 · Identity',
@@ -118,7 +118,7 @@ export default function FunnelAnalytics() {
           {data.steps.length === 0 ? (
             <EmptyState
               title="No funnel events yet"
-              hint="Events land here the moment your funnel starts posting to /api/crm/funnel/ingest. Each step counts distinct sessions, so this table is the live drop-off picture."
+              hint="Events land here the moment someone opens your funnel and it posts to /api/crm/funnel/ingest. Each step counts distinct sessions, so this table is the live drop-off picture."
             />
           ) : (
             <div className="grid lg:grid-cols-3 gap-10">

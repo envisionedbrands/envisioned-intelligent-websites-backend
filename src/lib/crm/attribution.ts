@@ -1,7 +1,7 @@
 /**
  * Content→lead attribution: which pages the visitors who became leads
  * actually read. Sourced from the visitors table (lead_id set once a visitor
- * converts, pages_viewed accumulated per visitor). Feeds the Operator's
+ * converts, pages_viewed accumulated per visitor). Feeds the agents'
  * get_content_attribution tool and biases trend-scan toward what converts.
  */
 import type { AdminClient } from "./types";

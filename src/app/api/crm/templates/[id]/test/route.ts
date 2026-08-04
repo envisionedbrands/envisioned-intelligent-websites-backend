@@ -25,9 +25,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!template) return NextResponse.json({ error: "Template not found" }, { status: 404 });
 
   const settings = await getCrmSettings(supabase);
-  // Real merge engine over a sample lead, so test sends match live sends
-  // (incl. computed tags like next_wednesday_date / renewal_date). Unknown
-  // tags stay visible so typos are catchable in the test email.
+  // Real merge engine over a sample lead, so test sends match live sends.
+  // Unknown tags stay visible so typos are catchable in the test email.
   const sample = previewLead();
   const overrides = { email: to, unsubscribe_url: "#test-email" };
   const keep = { keepUnknownTags: true };

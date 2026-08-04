@@ -217,7 +217,7 @@ export default function CrmSettingsPage() {
           <section className="border border-minimal-border rounded-lg p-6 flex flex-col gap-3">
             <h2 className="text-[13px] font-semibold text-zinc-300">Lead capture key</h2>
             <p className="text-[13px] text-zinc-500 leading-relaxed">
-              External senders (site forms proxy, third-party webhooks, Zapier) authenticate to{' '}
+              External senders (site forms proxy, GHL webhooks, Zapier) authenticate to{' '}
               <code className="text-zinc-300">POST /api/crm/capture</code> with the{' '}
               <code className="text-zinc-300">x-capture-key</code> header:
             </p>

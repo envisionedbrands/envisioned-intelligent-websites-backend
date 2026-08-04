@@ -2,7 +2,7 @@
  * POST /api/crm/capture — universal lead-capture endpoint.
  *
  * The front door for every lead source: site forms (proxied server-side),
- * third-party webhooks, Zapier/Make, or agents. Upserts by email,
+ * GHL webhooks during migration, Zapier/Make, or agents. Upserts by email,
  * logs activities, and fires workflow triggers.
  *
  * Auth: x-capture-key header (crm_capture_key setting) or standard API auth.
@@ -70,9 +70,8 @@ export async function POST(request: NextRequest) {
 
     // Auto-file into the sales pipeline: a fresh inbound lead opens a deal in
     // "New". Idempotent and forward-only. If upsertLead already enrolled them
-    // in a sequence (via a tag trigger), that enroll hook has already put them
-    // in "Nurturing" — this call then no-ops. Never fail a capture over a
-    // pipeline write.
+    // in a sequence via a tag trigger, that enroll hook has already put them in
+    // "Nurturing" — this call then no-ops. Never fail a capture over a pipeline write.
     try {
       await ensureLeadOpportunity(supabase, lead, { stage: "New", actor: `capture:${auth.via}` });
     } catch (e) {

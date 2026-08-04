@@ -1,9 +1,9 @@
 /**
  * POST /api/crm/funnel/ingest — funnel analytics intake.
  *
- * Receives batches of anonymous funnel events from your funnel pages (proxy
- * browser beacons here server-to-server, or post directly with the secret).
- * The client already dedupes each event per session, so the dashboard can count
+ * Receives batches of anonymous funnel events from funnel workers (a funnel
+ * site proxies browser beacons here server-to-server). The
+ * client already dedupes each event per session, so the dashboard can count
  * rows per step as distinct sessions — this endpoint just validates and stores.
  *
  * Auth: x-funnel-secret header (crm_funnel_secret setting) or standard API auth.

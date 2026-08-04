@@ -4,7 +4,7 @@ import { getCrmSettings } from "./settings";
 import type { AdminClient } from "./types";
 
 /**
- * Auth for public-facing capture endpoints (forms, third-party webhooks).
+ * Auth for public-facing capture endpoints (forms, GHL webhooks).
  * Accepts either:
  *  - x-capture-key header matching the crm_capture_key setting (simple shared
  *    key for webhook senders that can't do HMAC signing), or

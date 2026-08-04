@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateSessionOrApiKey, unauthorizedResponse } from "@/lib/api/auth";
 import { createAdminClient } from "@/lib/supabase/server";
-import { callClaudeStructured, loadBrandContext, REWRITE_SCHEMA, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
+import { callModelStructured, loadBrandContext, REWRITE_SCHEMA, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
 import type { Json } from "@/types/database";
 
 interface Rewrite {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   }
 
   const brandContext = await loadBrandContext(supabase);
-  const system = `You revise a single nurture email for this brand, keeping the brand voice intact.
+  const system = `You revise a single nurture email for the brand, keeping the brand voice intact.
 ${SEQUENCE_CRAFT_RULES}
 Deliver the revised email with the deliver_result tool.`;
 
@@ -65,7 +65,7 @@ ${instruction}
 Rewrite the email accordingly and deliver it with the tool.`;
 
   try {
-    const { result: rewrite, tokens } = await callClaudeStructured<Rewrite>(
+    const { result: rewrite, tokens } = await callModelStructured<Rewrite>(
       system,
       user,
       REWRITE_SCHEMA as unknown as Record<string, unknown>,

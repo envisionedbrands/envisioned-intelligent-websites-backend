@@ -60,9 +60,7 @@ export async function POST(request: NextRequest) {
       stage_id: stage.id,
       name,
       value_cents: Number(body.value_cents) || 0,
-      // Omit currency unless the caller sets one — the column default (chosen
-      // at install) applies.
-      ...(typeof body.currency === "string" && body.currency ? { currency: body.currency } : {}),
+      currency: body.currency || "AUD",
     })
     .select("*")
     .single();
