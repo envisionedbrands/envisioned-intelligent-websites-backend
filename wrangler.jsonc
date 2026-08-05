@@ -41,12 +41,18 @@
   // attaching a custom domain (e.g. media.yourdomain.com) and set
   // R2_PUBLIC_BASE below to match — Meta ingests by pulling that URL, and R2
   // egress is free.
-  "r2_buckets": [
-    {
-      "binding": "SOCIAL_MEDIA",
-      "bucket_name": "social-media"
-    }
-  ],
+  // DISABLED 2026-08-05: R2 is not enabled on this Cloudflare account, so
+  // wrangler fails the whole deploy on this binding (API error 10042). Social
+  // file upload throws a clear error without it (src/lib/social/upload.ts:29);
+  // nothing else is affected. Re-enable R2 in the dashboard, then uncomment —
+  // and set R2_PUBLIC_BASE below to the bucket's real public domain, which is
+  // required for Meta to ingest media regardless.
+  // "r2_buckets": [
+  //   {
+  //     "binding": "SOCIAL_MEDIA",
+  //     "bucket_name": "social-media"
+  //   }
+  // ],
   "observability": {
     "enabled": true
   },
