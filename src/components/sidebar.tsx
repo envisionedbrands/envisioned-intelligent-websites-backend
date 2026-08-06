@@ -227,8 +227,9 @@ export function Sidebar() {
         {/* Live site — the round trip with the frontend's Studio link. */}
         <a
           href={
-            process.env.NEXT_PUBLIC_DIGITAL_HOME_URL ||
-            'https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev'
+            // The workers.dev route was disabled when home.envisioned.me became
+            // the custom domain, so the old fallback now 404s.
+            process.env.NEXT_PUBLIC_DIGITAL_HOME_URL || 'https://home.envisioned.me'
           }
           target="_blank"
           rel="noopener noreferrer"

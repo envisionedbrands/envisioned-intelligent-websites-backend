@@ -63,8 +63,8 @@
     "SUPABASE_ANON_KEY": "sb_publishable_JumdNZ3GzN06G5oVgBR8_Q_SX8vdlbq",
     "NEXT_PUBLIC_SUPABASE_URL": "https://aqylffhuzunpimrebgye.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_JumdNZ3GzN06G5oVgBR8_Q_SX8vdlbq",
-    "DIGITAL_HOME_URL": "https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev",
-    "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://digital-home-frontend-starter.wandering-mouse-6d47.workers.dev",
+    "DIGITAL_HOME_URL": "https://home.envisioned.me",
+    "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://home.envisioned.me",
     "API_SIGNATURE_REQUIRED": "true",
     "API_REQUEST_SIGNATURE_TTL_SECONDS": "300",
     // R2 public base for social media assets. NOT yet claimed — social image
