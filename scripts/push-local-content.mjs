@@ -42,6 +42,9 @@ const BACKEND_URL =
   process.env.BACKEND_URL ||
   'https://envisioned-intelligent-websites-backend.wandering-mouse-6d47.workers.dev';
 
+/** The public site, used only to print a live link after --publish. */
+const SITE_URL = process.env.SITE_URL || 'https://home.envisioned.me';
+
 /** Valid enum values. Sending anything else makes Postgres reject the insert
  *  with a type error that reads like a server fault, so we fail early instead.
  *  Kept in sync with src/types/database.ts. */
@@ -84,7 +87,11 @@ function loadSecret() {
   );
 }
 
+/** In batch mode a bad file must not kill the run — the other pieces are fine. */
+let batchMode = false;
+
 function die(msg) {
+  if (batchMode) throw new Error(msg);
   console.error('\n✘ ' + msg + '\n');
   process.exit(1);
 }
@@ -92,7 +99,15 @@ function die(msg) {
 /** Minimal frontmatter reader. Handles `key: value` and `key: [a, b]`. */
 function parseFrontmatter(raw) {
   const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!m) die('No frontmatter found. The file must start with a --- block.');
+
+  // Most of her back catalogue is plain markdown with no frontmatter. Title is
+  // the only genuinely required field and it is derivable, so fall back to the
+  // first H1 rather than refusing the file. Everything else takes its default.
+  if (!m) {
+    const h1 = raw.match(/^#\s+(.+)$/m);
+    if (!h1) die('No frontmatter and no `# Heading` to take a title from.');
+    return { meta: { title: h1[1].trim() }, body: raw.trim() };
+  }
 
   const meta = {};
   for (const line of m[1].split('\n')) {
@@ -235,9 +250,40 @@ async function call(method, path, payload, secret, dryRun) {
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
-  const file = args.find((a) => !a.startsWith('--'));
-  if (!file) die('Usage: node scripts/push-local-content.mjs <file.md> [--dry-run]');
-  if (!existsSync(file)) die(`File not found: ${file}`);
+  // Opt-in per invocation, never the default. The approval already happened
+  // locally (she read it and said yes), so this just skips a second click —
+  // it does not remove a review, it relocates it.
+  const publish = args.includes('--publish');
+  const files = args.filter((a) => !a.startsWith('--'));
+  if (!files.length) {
+    die('Usage: node scripts/push-local-content.mjs <file.md> [more.md ...] [--publish] [--dry-run]');
+  }
+  for (const f of files) if (!existsSync(f)) die(`File not found: ${f}`);
+
+  // Batch: run each file through the same single-file path.
+  if (files.length > 1) {
+    batchMode = true;
+    const failed = [];
+    for (const f of files) {
+      try {
+        await pushOne(f, { dryRun, publish });
+      } catch (e) {
+        failed.push([f.split('/').pop(), e.message.split('\n')[0]]);
+        console.log(`  ✘ SKIPPED ${f.split('/').pop()} — ${e.message.split('\n')[0]}`);
+      }
+    }
+    console.log(`\n  ${files.length - failed.length}/${files.length} pushed.`);
+    if (failed.length) {
+      console.log(`  ${failed.length} skipped:`);
+      failed.forEach(([n, m]) => console.log(`    - ${n}: ${m}`));
+    }
+    console.log('');
+    return;
+  }
+  return pushOne(files[0], { dryRun, publish });
+}
+
+async function pushOne(file, { dryRun, publish }) {
 
   const { meta, body } = parseFrontmatter(readFileSync(file, 'utf8'));
   if (!meta.title) die('Frontmatter needs a `title`.');
@@ -296,11 +342,20 @@ async function main() {
   // happens locally and the same piece gets pushed again. A 409 means the slug
   // exists, so update it in place and leave the calendar entry alone.
   if (created.__conflict) {
-    await call('PATCH', `/api/articles/${slug}`, articleFields, secret, dryRun);
+    await call(
+      'PATCH',
+      `/api/articles/${slug}`,
+      publish ? { ...articleFields, status: 'published' } : articleFields,
+      secret,
+      dryRun
+    );
     console.log(`  ✓ existing article UPDATED (same slug)`);
+    if (publish) console.log(`  ✓ PUBLISHED — live at ${SITE_URL}/blog/${slug}`);
     console.log(
-      `\n  Done — updated in place. Status and calendar entry untouched.` +
-        `\n  Review: ${BACKEND_URL}/content\n`
+      publish
+        ? `\n  Done — updated and published.\n`
+        : `\n  Done — updated in place. Status and calendar entry untouched.` +
+            `\n  Review: ${BACKEND_URL}/content\n`
     );
     return;
   }
@@ -341,10 +396,19 @@ async function main() {
   );
   console.log(`  ✓ linked`);
 
+  // Publishing is a status change on the article; the calendar entry follows,
+  // because PATCH /api/articles/[slug] syncs the linked entry's status.
+  if (publish && !dryRun) {
+    await call('PATCH', `/api/articles/${slug}`, { status: 'published' }, secret, dryRun);
+    console.log(`  ✓ PUBLISHED — live at ${SITE_URL}/blog/${slug}`);
+  }
+
   console.log(
     dryRun
       ? '\n  Dry run. Nothing was sent.\n'
-      : `\n  Done — sitting as a DRAFT on the Ready board.\n  Review: ${BACKEND_URL}/content\n`
+      : publish
+        ? `\n  Done — published.\n`
+        : `\n  Done — sitting as a DRAFT on the Ready board.\n  Review: ${BACKEND_URL}/content\n`
   );
 }
 
