@@ -254,7 +254,7 @@ async function main() {
   // locally (she read it and said yes), so this just skips a second click —
   // it does not remove a review, it relocates it.
   const publish = args.includes('--publish');
-  const files = args.filter((a) => !a.startsWith('--'));
+  let files = args.filter((a) => !a.startsWith('--'));
   if (!files.length) {
     die('Usage: node scripts/push-local-content.mjs <file.md> [more.md ...] [--publish] [--dry-run]');
   }
@@ -264,6 +264,18 @@ async function main() {
   if (files.length > 1) {
     batchMode = true;
     const failed = [];
+
+    // Paid pieces must never ride along in a glob. The standing deal is essays
+    // free, applied layer paid — pushing one to a public blog gives away the
+    // tier. Naming the file explicitly (a single-file push) still works.
+    const paid = files.filter((f) => /paid/i.test(f.split('/').pop()));
+    if (paid.length) {
+      console.log(`\n  Skipping ${paid.length} PAID piece(s) — public blog would expose the paid tier:`);
+      paid.forEach((f) => console.log(`    - ${f.split('/').pop()}`));
+      console.log('  (push one explicitly by name if that is genuinely intended)');
+    }
+    files = files.filter((f) => !/paid/i.test(f.split('/').pop()));
+
     for (const f of files) {
       try {
         await pushOne(f, { dryRun, publish });
