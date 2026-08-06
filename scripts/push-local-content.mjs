@@ -111,6 +111,87 @@ function parseFrontmatter(raw) {
   return { meta, body: m[2].trim() };
 }
 
+/**
+ * Markdown -> semantic HTML.
+ *
+ * The website renders article bodies with dangerouslySetInnerHTML and has NO
+ * markdown library installed, so raw markdown would display as one unstyled
+ * blob with literal `#` and `**` on screen. It also builds its table of
+ * contents by parsing <h2>/<h3> tags, so headings must be real elements or the
+ * TOC comes out empty.
+ *
+ * Emits only the tags the site's .article-body CSS actually styles:
+ * h2, h3, p, ul, ol, li, blockquote, strong, em, a, img, hr.
+ */
+function mdToHtml(md, title) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Inline formatting. Escape first, then introduce our own tags, so nothing in
+  // the source can inject markup.
+  const inline = (s) =>
+    esc(s)
+      .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt, src) => `<img src="${src}" alt="${alt}">`)
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text, href) => `<a href="${href}">${text}</a>`)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+      .replace(/(^|\s)_([^_\n]+)_/g, '$1<em>$2</em>');
+
+  const out = [];
+  let list = null; // 'ul' | 'ol'
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+
+  // Split into blocks on blank lines, but keep list/quote runs together.
+  const lines = md.replace(/\r\n/g, '\n').split('\n');
+  let para = [];
+  const flushPara = () => {
+    if (!para.length) return;
+    out.push(`<p>${inline(para.join(' ').trim())}</p>`);
+    para = [];
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    if (!line.trim()) { flushPara(); closeList(); continue; }
+
+    // The page renders the title itself, so a leading H1 would print it twice.
+    const h1 = line.match(/^#\s+(.*)$/);
+    if (h1) {
+      flushPara(); closeList();
+      if (title && h1[1].trim().toLowerCase() === title.trim().toLowerCase()) continue;
+      out.push(`<h2>${inline(h1[1])}</h2>`);
+      continue;
+    }
+    const h = line.match(/^(#{2,3})\s+(.*)$/);
+    if (h) { flushPara(); closeList(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) { flushPara(); closeList(); out.push('<hr>'); continue; }
+
+    const q = line.match(/^>\s?(.*)$/);
+    if (q) { flushPara(); closeList(); out.push(`<blockquote><p>${inline(q[1])}</p></blockquote>`); continue; }
+
+    const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+    if (ul) {
+      flushPara();
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${inline(ul[1])}</li>`);
+      continue;
+    }
+    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) {
+      flushPara();
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${inline(ol[1])}</li>`);
+      continue;
+    }
+
+    closeList();
+    para.push(line);
+  }
+  flushPara(); closeList();
+  return out.join('\n');
+}
+
 /** HMAC over METHOD:pathname:timestamp:body — must match src/lib/api/auth.ts. */
 async function call(method, path, payload, secret, dryRun) {
   const bodyText = JSON.stringify(payload);
@@ -143,7 +224,11 @@ async function call(method, path, payload, secret, dryRun) {
   } catch {
     die(`${method} ${path} returned non-JSON (HTTP ${res.status}):\n${text.slice(0, 400)}`);
   }
-  if (!res.ok) die(`${method} ${path} failed (HTTP ${res.status}): ${json.error || text}`);
+  if (!res.ok) {
+    // 409 = the slug already exists. The caller decides whether to update.
+    if (res.status === 409) return { __conflict: true };
+    die(`${method} ${path} failed (HTTP ${res.status}): ${json.error || text}`);
+  }
   return json;
 }
 
@@ -171,40 +256,55 @@ async function main() {
 
   const secret = dryRun ? 'dry-run-placeholder' : loadSecret();
   const words = body.split(/\s+/).filter(Boolean).length;
+  const bodyHtml = mdToHtml(body, meta.title);
+  const headings = (bodyHtml.match(/<h[23]>/g) || []).length;
 
   console.log(`\n  ${meta.title}`);
-  console.log(`  slug: ${slug}   ${words} words   → ${BACKEND_URL}\n`);
+  console.log(`  slug: ${slug}   ${words} words   ${headings} headings (TOC)   → ${BACKEND_URL}\n`);
 
   // 1 — the article itself, as a draft.
   //     created_by must be one of human|content_agent|seo_agent; the enum has
   //     no local_push value, so the local origin is recorded on the calendar
   //     entry (free-text) which is what /content actually reads.
-  const { article } = await call(
+  const articleFields = {
+    title: meta.title,
+    subtitle: meta.subtitle,
+    body: bodyHtml,
+    excerpt: meta.excerpt,
+    content_type: contentType,
+    author_name: meta.author_name || 'Maria-Ines',
+    featured_image_url: meta.featured_image_url,
+    semantic_tags: meta.semantic_tags || [],
+    associated_offers: meta.associated_offers || [],
+    seo: {
+      title: meta.seo_title || meta.title,
+      description: meta.excerpt,
+      target_keyword: meta.target_keyword,
+      keyword_cluster: meta.keyword_cluster,
+    },
+  };
+
+  const created = await call(
     'POST',
     '/api/articles',
-    {
-      slug,
-      title: meta.title,
-      subtitle: meta.subtitle,
-      body,
-      excerpt: meta.excerpt,
-      content_type: contentType,
-      status: 'draft',
-      created_by: 'human',
-      author_name: meta.author_name || 'Maria-Ines',
-      featured_image_url: meta.featured_image_url,
-      semantic_tags: meta.semantic_tags || [],
-      associated_offers: meta.associated_offers || [],
-      seo: {
-        title: meta.seo_title || meta.title,
-        description: meta.excerpt,
-        target_keyword: meta.target_keyword,
-        keyword_cluster: meta.keyword_cluster,
-      },
-    },
+    { slug, status: 'draft', created_by: 'human', ...articleFields },
     secret,
     dryRun
   );
+
+  // Re-pushing an edited draft is the normal case, not an error: the writing
+  // happens locally and the same piece gets pushed again. A 409 means the slug
+  // exists, so update it in place and leave the calendar entry alone.
+  if (created.__conflict) {
+    await call('PATCH', `/api/articles/${slug}`, articleFields, secret, dryRun);
+    console.log(`  ✓ existing article UPDATED (same slug)`);
+    console.log(
+      `\n  Done — updated in place. Status and calendar entry untouched.` +
+        `\n  Review: ${BACKEND_URL}/content\n`
+    );
+    return;
+  }
+  const article = created.article;
   console.log(`  ✓ article draft created`);
 
   // 2 — the calendar entry. POST sets status directly, bypassing the PATCH

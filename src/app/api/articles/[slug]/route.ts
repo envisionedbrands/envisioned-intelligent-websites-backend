@@ -4,7 +4,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateSession, unauthorizedResponse } from "@/lib/api/auth";
+// Session OR signed API key, matching /api/articles (the collection route).
+// They were inconsistent: an agent could CREATE an article but not UPDATE one,
+// which blocked re-pushing an edited draft from a local writing workflow.
+import { authenticateSessionOrApiKey, unauthorizedResponse } from "@/lib/api/auth";
 import { createAdminClient } from "@/lib/supabase/server";
 
 
@@ -12,7 +15,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  const auth = await authenticateSession(request);
+  const auth = await authenticateSessionOrApiKey(request);
   if (!auth.authenticated) return unauthorizedResponse(auth.error);
 
   const { slug } = await params;
@@ -35,7 +38,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  const auth = await authenticateSession(request);
+  const auth = await authenticateSessionOrApiKey(request);
   if (!auth.authenticated) return unauthorizedResponse(auth.error);
 
   const { slug } = await params;
