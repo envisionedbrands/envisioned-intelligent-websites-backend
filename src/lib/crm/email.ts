@@ -1,4 +1,4 @@
-import { renderMergeTags, unsubscribeUrl } from "./merge";
+import { renderMergeTags, unsubscribeUrl, unsubscribeOneClickUrl } from "./merge";
 import { renderEmailHtml } from "./markdown";
 import { logActivity } from "./activity";
 import { getCrmSettings } from "./settings";
@@ -67,6 +67,9 @@ export async function sendCrmEmail(
   const subject = renderMergeTags(input.subject, lead);
   const bodyMd = renderMergeTags(input.bodyMd, lead);
   const unsub = unsubscribeUrl(lead);
+  // The header target must be a POST-able route handler, not the page - see
+  // unsubscribeOneClickUrl. Gmail POSTs it and records a 405 as a failure.
+  const unsubOneClick = unsubscribeOneClickUrl(lead);
   const html = renderEmailHtml({
     bodyMd,
     preheader: input.preheader ? renderMergeTags(input.preheader, lead) : null,
@@ -107,7 +110,7 @@ export async function sendCrmEmail(
         html,
         reply_to: cfg.sender.reply_to || cfg.sender.from_email,
         headers: {
-          "List-Unsubscribe": `<${unsub}>`,
+          "List-Unsubscribe": `<${unsubOneClick}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
       }),

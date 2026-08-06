@@ -8,12 +8,27 @@ import type { Lead } from "./types";
  */
 const TAG_RE = /\{\{\s*([a-zA-Z0-9_.]+)\s*(?:\|([^}]*))?\s*\}\}/g;
 
-export function unsubscribeUrl(lead: Pick<Lead, "unsubscribe_token">): string {
+function siteBase(): string {
   const base =
     process.env.DIGITAL_HOME_URL ||
     process.env.NEXT_PUBLIC_DIGITAL_HOME_URL ||
     "https://www.yourdomain.com";
-  return `${base.replace(/\/$/, "")}/unsubscribe?t=${lead.unsubscribe_token}`;
+  return base.replace(/\/$/, "");
+}
+
+/** The human-facing link in the email footer. Lands on a page that ASKS first.
+ *  Mail scanners follow every link in an email, so a one-step GET would
+ *  unsubscribe people who never clicked. */
+export function unsubscribeUrl(lead: Pick<Lead, "unsubscribe_token">): string {
+  return `${siteBase()}/unsubscribe?t=${lead.unsubscribe_token}`;
+}
+
+/** The RFC 8058 one-click target for the List-Unsubscribe-Post header.
+ *  Gmail and Yahoo POST here directly and expect a 2xx, so it must be a route
+ *  handler and NOT a page - a Next page cannot answer POST and would return
+ *  405, which mailbox providers record as a failed unsubscribe. */
+export function unsubscribeOneClickUrl(lead: Pick<Lead, "unsubscribe_token">): string {
+  return `${siteBase()}/api/unsubscribe?t=${lead.unsubscribe_token}`;
 }
 
 export function mergeValues(lead: Lead, extra: Record<string, string> = {}): Record<string, string> {
