@@ -18,3 +18,8 @@ node_modules
 !.dev.vars.example
 !.env.example
 tsconfig.tsbuildinfo
+
+# Backups of env files (e.g. .env.local.bak-2026-08-11) — these hold live secrets.
+# ".env*.local" above does not match them because they do not end in ".local".
+.env*.bak*
+*.bak

@@ -38,6 +38,11 @@ type Lead = {
 
 const STATUSES = ['new', 'engaged', 'qualified', 'converted', 'lost'];
 
+// Tags listed in backend_settings.crm_send_budget.suppress_tags — applying one
+// of these stops every automated email to that person (see lib/crm/email.ts).
+// Keep this in sync with that setting; it is display-only, the server decides.
+const NO_EMAIL_TAGS = ['contact-only', 'peer', 'junk', 'internal'];
+
 // Minimal CSV parser (quotes + commas), good enough for GHL/spreadsheet exports
 function parseCsv(text: string): Record<string, string>[] {
   const rows: string[][] = [];
@@ -106,6 +111,12 @@ export default function LeadsPage() {
   const [tags, setTags] = useState<{ name: string; count: number }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showTag, setShowTag] = useState(false);
+  const [tagValue, setTagValue] = useState('');
+  const [tagging, setTagging] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
@@ -147,10 +158,99 @@ export default function LeadsPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / 25));
 
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const allOnPageSelected = !!leads?.length && leads.every((l) => selected.has(l.id));
+  const toggleAllOnPage = () =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) leads?.forEach((l) => next.delete(l.id));
+      else leads?.forEach((l) => next.add(l.id));
+      return next;
+    });
+
+  // Adds one tag to every selected lead, preserving tags they already have.
+  // PATCH replaces the whole tags array, so each lead's current tags are read
+  // first — from this page's data when possible, otherwise fetched.
+  const applyTagToSelected = async () => {
+    const tag = tagValue.trim();
+    if (!tag) return;
+    setTagging(true);
+    const ids = [...selected];
+    let ok = 0;
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        let current = leads?.find((l) => l.id === id)?.tags;
+        if (!current) {
+          const res = await api<{ lead: { tags: string[] } }>(`/api/crm/leads/${id}`);
+          current = res.lead.tags || [];
+        }
+        if (!current.includes(tag)) {
+          await api(`/api/crm/leads/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ tags: [...current, tag] }),
+          });
+        }
+        ok++;
+      } catch {
+        failed.push(id);
+      }
+    }
+    setTagging(false);
+    setShowTag(false);
+    setTagValue('');
+    setSelected(new Set(failed));
+    if (failed.length) show(`Tagged ${ok}, failed ${failed.length}`, 'err');
+    else show(`Tagged ${ok} with "${tag}"`);
+    load();
+    api<{ tags: { name: string; count: number }[] }>('/api/crm/tags')
+      .then((r) => setTags(r.tags))
+      .catch(() => {});
+  };
+
+  // Hard delete: removes the lead and its email history (see DELETE /api/crm/leads/[id]).
+  // Deletes one at a time so a single failure doesn't hide the rest.
+  const deleteSelected = async () => {
+    setDeleting(true);
+    const ids = [...selected];
+    const failed: string[] = [];
+    for (const id of ids) {
+      try {
+        await api(`/api/crm/leads/${id}`, { method: 'DELETE' });
+      } catch {
+        failed.push(id);
+      }
+    }
+    setDeleting(false);
+    setConfirmDelete(false);
+    setSelected(new Set(failed));
+    const removed = ids.length - failed.length;
+    if (failed.length) show(`Deleted ${removed}, failed ${failed.length}`, 'err');
+    else show(`Deleted ${removed} ${removed === 1 ? 'lead' : 'leads'}`);
+    load();
+  };
+
   return (
     <div className="flex flex-col h-full">
       {toastNode}
       <PageHeader title={`Leads · ${total}`}>
+        {selected.size > 0 && (
+          <>
+            <span className="text-[13px] text-minimal-muted mr-1">{selected.size} selected</span>
+            <GhostBtn onClick={() => setSelected(new Set())}>Clear</GhostBtn>
+            <GhostBtn onClick={() => setShowTag(true)}>Tag</GhostBtn>
+            <GhostBtn danger onClick={() => setConfirmDelete(true)}>
+              Delete {selected.size}
+            </GhostBtn>
+          </>
+        )}
         <GhostBtn onClick={() => setShowImport(true)}>Import CSV</GhostBtn>
         <PrimaryBtn onClick={() => setShowAdd(true)}>Add lead</PrimaryBtn>
       </PageHeader>
@@ -210,6 +310,15 @@ export default function LeadsPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="text-xs text-minimal-muted border-b border-minimal-border">
+                  <th className="pl-5 pr-0 py-3 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all on this page"
+                      checked={allOnPageSelected}
+                      onChange={toggleAllOnPage}
+                      className="cursor-pointer align-middle"
+                    />
+                  </th>
                   <th className="px-5 py-3 font-medium">Lead</th>
                   <th className="px-5 py-3 font-medium">Status</th>
                   <th className="px-5 py-3 font-medium">Tags</th>
@@ -224,6 +333,16 @@ export default function LeadsPage() {
                     onClick={() => router.push(`/crm/leads/${lead.id}`)}
                     className="cursor-pointer hover:bg-minimal-row transition-colors"
                   >
+                    {/* stopPropagation so ticking the box doesn't open the lead */}
+                    <td className="pl-5 pr-0 py-3.5 w-8" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${lead.email}`}
+                        checked={selected.has(lead.id)}
+                        onChange={() => toggleOne(lead.id)}
+                        className="cursor-pointer align-middle"
+                      />
+                    </td>
                     <td className="px-5 py-3.5">
                       <p className="text-sm text-white">{leadName(lead)}</p>
                       <p className="text-xs text-zinc-600">
@@ -288,6 +407,122 @@ export default function LeadsPage() {
           </div>
         )}
       </div>
+
+      {showTag && (
+        <Modal
+          title={`Tag ${selected.size} ${selected.size === 1 ? 'lead' : 'leads'}`}
+          onClose={() => setShowTag(false)}
+        >
+          <div className="space-y-4">
+            <div>
+              <p className="text-[13px] font-medium text-zinc-300 mb-2">Stops all automated email</p>
+              <div className="flex flex-wrap gap-2">
+                {NO_EMAIL_TAGS.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTagValue(t)}
+                    className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                      tagValue === t
+                        ? 'border-red-500/50 text-red-300 bg-red-500/10'
+                        : 'border-minimal-border text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-zinc-600 mt-2">
+                Use <span className="text-zinc-400">contact-only</span> for peers and people you know
+                personally — they stay in the CRM, they never get a campaign.
+              </p>
+            </div>
+
+            {tags.length > 0 && (
+              <div>
+                <p className="text-[13px] font-medium text-zinc-300 mb-2">Existing tags</p>
+                <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto">
+                  {tags
+                    .filter((t) => !NO_EMAIL_TAGS.includes(t.name))
+                    .map((t) => (
+                      <button
+                        key={t.name}
+                        type="button"
+                        onClick={() => setTagValue(t.name)}
+                        className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                          tagValue === t.name
+                            ? 'border-zinc-400 text-white'
+                            : 'border-minimal-border text-zinc-500 hover:text-white'
+                        }`}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            <Field label="Tag to apply" hint="Pick one above or type a new one. Existing tags are kept.">
+              <TextInput
+                autoFocus
+                value={tagValue}
+                onChange={(e) => setTagValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && tagValue.trim() && !tagging) applyTagToSelected();
+                }}
+                placeholder="e.g. peer"
+              />
+            </Field>
+
+            {NO_EMAIL_TAGS.includes(tagValue.trim()) && (
+              <p className="text-xs text-amber-400/80">
+                These {selected.size === 1 ? 'person' : 'people'} will be skipped by every email
+                workflow from now on.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <GhostBtn onClick={() => setShowTag(false)} disabled={tagging}>
+                Cancel
+              </GhostBtn>
+              <PrimaryBtn onClick={applyTagToSelected} disabled={tagging || !tagValue.trim()}>
+                {tagging ? 'Tagging…' : `Tag ${selected.size}`}
+              </PrimaryBtn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {confirmDelete && (
+        <Modal title={`Delete ${selected.size} ${selected.size === 1 ? 'lead' : 'leads'}?`} onClose={() => setConfirmDelete(false)}>
+          <p className="text-[14px] text-zinc-300 leading-relaxed">
+            This permanently removes {selected.size === 1 ? 'this person' : 'these people'} and their email
+            history. It cannot be undone.
+          </p>
+          <div className="mt-4 max-h-48 overflow-y-auto border border-minimal-border rounded-lg divide-y divide-minimal-border">
+            {leads
+              ?.filter((l) => selected.has(l.id))
+              .map((l) => (
+                <p key={l.id} className="px-3 py-2 text-[13px] text-zinc-400">
+                  {l.email}
+                </p>
+              ))}
+          </div>
+          {leads && [...selected].some((id) => !leads.find((l) => l.id === id)) && (
+            <p className="mt-3 text-xs text-amber-400/80">
+              Some selected leads are on other pages and are not listed above, but will be deleted.
+            </p>
+          )}
+          <div className="flex justify-end gap-2 mt-6">
+            <GhostBtn onClick={() => setConfirmDelete(false)} disabled={deleting}>
+              Cancel
+            </GhostBtn>
+            <GhostBtn danger onClick={deleteSelected} disabled={deleting}>
+              {deleting ? 'Deleting…' : `Delete ${selected.size}`}
+            </GhostBtn>
+          </div>
+        </Modal>
+      )}
 
       {showAdd && (
         <AddLeadModal
