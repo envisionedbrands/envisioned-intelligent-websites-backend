@@ -67,6 +67,7 @@ export default function ArticleEditorPage() {
   const [editSeoTitle, setEditSeoTitle] = useState('');
   const [editSeoDescription, setEditSeoDescription] = useState('');
   const [editSeoKeyword, setEditSeoKeyword] = useState('');
+  const [editImage, setEditImage] = useState('');
 
   const fetchArticle = useCallback(async () => {
     setLoading(true);
@@ -88,6 +89,7 @@ export default function ArticleEditorPage() {
     setEditSeoTitle(article.seo_meta?.title || '');
     setEditSeoDescription(article.seo_meta?.description || '');
     setEditSeoKeyword(article.seo_meta?.target_keyword || '');
+    setEditImage(article.featured_image_url || '');
     setShowMeta(false);
     setEditing(true);
   };
@@ -100,6 +102,7 @@ export default function ArticleEditorPage() {
       body: editBody,
       excerpt: editExcerpt,
       semantic_tags: editTags.split(',').map((t) => t.trim()).filter(Boolean),
+      featured_image_url: editImage.trim() || null,
     };
     if (article.seo_meta) {
       payload.seo = {
@@ -300,6 +303,37 @@ export default function ArticleEditorPage() {
           {/* Editor Area */}
           <div className={`flex-1 ${showMeta ? '' : ''}`}>
             <div className="max-w-[720px] mx-auto py-24 px-6">
+              {/* Hero image — what the blog card and article header will show.
+                  Surfacing it here is the point: a missing image was invisible
+                  in this view and appeared as a grey placeholder on the live
+                  site only after publishing. */}
+              {editing ? (
+                <div className="mb-10">
+                  {editImage.trim() ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={editImage} alt="" className="w-full rounded-lg mb-3 max-h-[420px] object-cover" />
+                  ) : (
+                    <div className="w-full h-40 rounded-lg mb-3 border border-dashed border-minimal-border flex items-center justify-center text-minimal-muted/50 text-sm">
+                      No hero image — the blog card will show a grey placeholder
+                    </div>
+                  )}
+                  <input
+                    type="url"
+                    value={editImage}
+                    onChange={(e) => setEditImage(e.target.value)}
+                    placeholder="https://… hero image URL"
+                    className="w-full bg-transparent text-sm text-minimal-muted border border-minimal-border rounded-lg px-3 py-2 focus:outline-none focus:border-zinc-400"
+                  />
+                </div>
+              ) : article.featured_image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={article.featured_image_url}
+                  alt=""
+                  className="w-full rounded-lg mb-10 max-h-[420px] object-cover"
+                />
+              ) : null}
+
               {/* Title */}
               {editing ? (
                 <input
