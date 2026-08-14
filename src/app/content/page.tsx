@@ -277,6 +277,29 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
   const [writing, setWriting] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
+  // Collapsed columns fold to a slim rail — nothing is deleted, the cards are
+  // just tucked away. Defaults: archived starts collapsed (it is the long tail
+  // of history), and the AI-writer pipeline stages collapse too since the
+  // local-push workflow skips them. Persisted per browser.
+  const [collapsedCols, setCollapsedCols] = useState<Record<string, boolean>>({
+    planned: true,
+    approved: true,
+    writing: true,
+    archived: true,
+  });
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dh-collapsed-columns');
+      if (saved) setCollapsedCols(JSON.parse(saved));
+    } catch {}
+  }, []);
+  const toggleColumn = (status: string) => {
+    setCollapsedCols((prev) => {
+      const next = { ...prev, [status]: !prev[status] };
+      try { localStorage.setItem('dh-collapsed-columns', JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
@@ -494,7 +517,35 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
       onDragCancel={handleDragCancel}
     >
       <div className="flex-1 px-12 pb-6 overflow-x-auto flex gap-6">
-        {BOARD_COLUMNS.map((status) => (
+        {BOARD_COLUMNS.map((status) => {
+          // A collapsed column folds to a slim rail. It force-expands while a
+          // drag is in progress and it is a legal drop target, so collapsing
+          // never blocks a move (e.g. dragging a card to Archived).
+          const isCollapsed =
+            !!collapsedCols[status] &&
+            !(activeId && validTargets.includes(status));
+          if (isCollapsed) {
+            return (
+              <button
+                key={status}
+                onClick={() => toggleColumn(status)}
+                title={`Show ${status} (${grouped[status].length})`}
+                className="w-10 shrink-0 flex flex-col items-center gap-3 border border-minimal-border rounded-lg py-4 text-minimal-muted hover:text-white hover:border-zinc-500 transition-colors"
+              >
+                <span className="text-[10px]">▸</span>
+                <span
+                  className="text-[10px] font-medium uppercase tracking-widest"
+                  style={{ writingMode: 'vertical-rl' }}
+                >
+                  {status}
+                </span>
+                <span className="text-[10px] rounded-full border border-minimal-border px-1.5 py-0.5">
+                  {grouped[status].length}
+                </span>
+              </button>
+            );
+          }
+          return (
           <DroppableColumn
             key={status}
             id={status}
@@ -502,6 +553,7 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
             isOver={overColumn === status}
             isValid={activeId ? validTargets.includes(status) : false}
             isDragging={!!activeId}
+            onCollapse={() => toggleColumn(status)}
           >
             {grouped[status].length === 0 ? (
               <div className="text-xs text-minimal-muted/40 text-center py-8">
@@ -526,7 +578,8 @@ function BoardView({ digitalHomeUrl }: { digitalHomeUrl: string }) {
               ))
             )}
           </DroppableColumn>
-        ))}
+          );
+        })}
       </div>
 
       {/* Drag overlay — the ghost card that follows the cursor */}
@@ -549,6 +602,7 @@ function DroppableColumn({
   isOver,
   isValid,
   isDragging,
+  onCollapse,
   children,
 }: {
   id: string;
@@ -556,6 +610,7 @@ function DroppableColumn({
   isOver: boolean;
   isValid: boolean;
   isDragging: boolean;
+  onCollapse?: () => void;
   children: React.ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id });
@@ -574,7 +629,18 @@ function DroppableColumn({
         <span className="text-xs font-medium capitalize text-minimal-muted">
           {id}
         </span>
-        <span className="text-xs text-minimal-muted">{count}</span>
+        <span className="flex items-center gap-2">
+          <span className="text-xs text-minimal-muted">{count}</span>
+          {onCollapse && (
+            <button
+              onClick={onCollapse}
+              title={`Collapse ${id}`}
+              className="text-xs text-minimal-muted/60 hover:text-white transition-colors px-1"
+            >
+              ▾
+            </button>
+          )}
+        </span>
       </div>
       <div className="flex flex-col gap-3 overflow-y-auto flex-1 px-3 -mx-3">
         {children}
