@@ -15,7 +15,11 @@ const SNAPSHOT_STALE_MS = 6 * 60 * 60 * 1000;
 const TRACK_WINDOW_DAYS = 30;
 const MAX_PER_TICK = 25;
 
-export async function refreshDueMetrics(supabase: AdminClient): Promise<number> {
+export async function refreshDueMetrics(
+  supabase: AdminClient,
+  opts: { force?: boolean } = {}
+): Promise<{ refreshed: number; errors: string[] }> {
+  const errors: string[] = [];
   const windowStart = new Date(Date.now() - TRACK_WINDOW_DAYS * 86400000).toISOString();
   const { data: targets } = await supabase
     .from("social_post_targets")
@@ -25,7 +29,7 @@ export async function refreshDueMetrics(supabase: AdminClient): Promise<number> 
     .gte("published_at", windowStart)
     .order("published_at", { ascending: false })
     .limit(100);
-  if (!targets?.length) return 0;
+  if (!targets?.length) return { refreshed: 0, errors };
 
   // Latest snapshot per target in one query.
   const ids = targets.map((t) => t.id);
@@ -39,10 +43,14 @@ export async function refreshDueMetrics(supabase: AdminClient): Promise<number> 
     if (!latest.has(s.target_id)) latest.set(s.target_id, s.captured_at);
   }
 
-  const due = targets.filter((t) => {
-    const last = latest.get(t.id);
-    return !last || Date.now() - new Date(last).getTime() > SNAPSHOT_STALE_MS;
-  });
+  // force: a human asked for fresh numbers now (studio refresh), so skip the
+  // staleness gate rather than making them wait out the snapshot interval.
+  const due = opts.force
+    ? targets
+    : targets.filter((t) => {
+        const last = latest.get(t.id);
+        return !last || Date.now() - new Date(last).getTime() > SNAPSHOT_STALE_MS;
+      });
 
   // One YouTube access token per channel per run.
   const ytTokens = new Map<string, string>();
@@ -85,10 +93,16 @@ export async function refreshDueMetrics(supabase: AdminClient): Promise<number> 
         raw: snap.raw as never,
       });
       refreshed++;
-    } catch {
-      // Insights lag behind publishing (IG often 404s for the first hour) —
-      // skip quietly and let the next tick retry.
+    } catch (e) {
+      // Insights lag behind publishing (IG often 404s for the first hour), so
+      // a miss is not fatal — but it must be VISIBLE. Swallowing these silently
+      // hid a completely dead metrics pipeline for days (2026-08-06).
+      errors.push(
+        `metrics ${target.platform}/${target.external_id}: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
     }
   }
-  return refreshed;
+  return { refreshed, errors };
 }

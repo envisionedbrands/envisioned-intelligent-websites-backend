@@ -22,12 +22,19 @@ import {
   igCreateContainer,
   igCreateImagePost,
 } from "./meta";
-import { googleRefreshAccessToken, ytUploadVideo } from "./youtube";
+import {
+  googleRefreshAccessToken,
+  type YouTubeUploadRef,
+  ytResumeVideoUpload,
+  ytStartVideoUpload,
+} from "./youtube";
 import { refreshDueMetrics } from "./metrics";
 
 const MAX_ATTEMPTS = 3;
 /** Give Meta this long to transcode before we call the target dead. */
 const PROCESSING_DEADLINE_MS = 45 * 60 * 1000;
+/** A pending-target claim older than this came from a dead worker and may be recovered. */
+const TARGET_LEASE_MS = 10 * 60 * 1000;
 /** Inline poll budget after kicking off an IG container (publish-now UX). */
 const IG_INLINE_POLLS = 4;
 const IG_INLINE_POLL_DELAY_MS = 8000;
@@ -57,7 +64,9 @@ async function beginCarouselPublish(
   const images = media
     .filter((m) => m.kind === "image")
     .sort((a, b) => a.position - b.position)
-    .map((m) => m.url);
+    // IG caches media-fetch failures per URL (code 9004): on a retry, a
+    // cache-busting param makes Meta fetch fresh instead of re-failing.
+    .map((m) => (target.attempts > 0 ? `${m.url}${m.url.includes("?") ? "&" : "?"}r=${target.attempts}` : m.url));
   if (images.length < 1) {
     return { state: "failed", error: "Image post has no slides attached" };
   }
@@ -120,6 +129,19 @@ async function beginPublish(
   account: SocialAccount,
   media: SocialMedia[]
 ): Promise<PublishStep> {
+  // Absolute backstop: a target with a final platform id must never enter any
+  // platform's create/upload path again, regardless of its local status.
+  if (target.external_id) {
+    return {
+      state: "published",
+      externalId: target.external_id,
+      externalUrl:
+        target.external_url ||
+        (target.platform === "youtube"
+          ? `https://www.youtube.com/shorts/${target.external_id}`
+          : null),
+    };
+  }
   if (post.post_type === "carousel") {
     return beginCarouselPublish(post, target, account, media);
   }
@@ -152,15 +174,21 @@ async function beginPublish(
     return { state: "processing", ref: { video_id: videoId } };
   }
 
-  // YouTube — synchronous upload; the video id is final once bytes land.
+  // YouTube is two-phase: persist the session URI on this tick, then upload
+  // chunks on the next. No bytes move until retry state is durable.
   if (!account.refresh_token) return { state: "failed", error: "YouTube channel has no refresh token" };
   const accessToken = await googleRefreshAccessToken(account.refresh_token);
-  const uploaded = await ytUploadVideo(accessToken, {
+  const existingRef = (target.platform_ref || {}) as Partial<YouTubeUploadRef>;
+  if (existingRef.youtube_upload_url) {
+    const uploaded = await ytResumeVideoUpload(accessToken, existingRef as YouTubeUploadRef);
+    return { state: "published", externalId: uploaded.videoId, externalUrl: uploaded.url };
+  }
+  const ref = await ytStartVideoUpload(accessToken, {
     videoUrl: post.video_url,
     title: post.title || caption.split("\n")[0]?.slice(0, 100) || "Short",
     description: caption,
   });
-  return { state: "published", externalId: uploaded.videoId, externalUrl: uploaded.url };
+  return { state: "processing", ref: { ...ref } };
 }
 
 /** Poll step for a target already in `processing`. */
@@ -169,14 +197,18 @@ async function continuePublish(
   account: SocialAccount
 ): Promise<PublishStep> {
   const ref = (target.platform_ref || {}) as Record<string, unknown>;
-  if (!account.access_token) return { state: "failed", error: "Account token missing" };
   if (target.platform === "instagram") {
+    if (!account.access_token) return { state: "failed", error: "Instagram account token missing" };
     return igAdvance(account.external_id, account.access_token, ref);
   }
   if (target.platform === "facebook") {
+    if (!account.access_token) return { state: "failed", error: "Facebook account token missing" };
     return fbAdvance(account.external_id, account.access_token, ref);
   }
-  return { state: "failed", error: "YouTube targets never enter processing" };
+  if (!account.refresh_token) return { state: "failed", error: "YouTube channel has no refresh token" };
+  const accessToken = await googleRefreshAccessToken(account.refresh_token);
+  const uploaded = await ytResumeVideoUpload(accessToken, ref as unknown as YouTubeUploadRef);
+  return { state: "published", externalId: uploaded.videoId, externalUrl: uploaded.url };
 }
 
 async function applyStep(
@@ -186,7 +218,7 @@ async function applyStep(
   attemptsDelta: number
 ): Promise<void> {
   if (step.state === "published") {
-    await supabase
+    const { error } = await supabase
       .from("social_post_targets")
       .update({
         status: "published",
@@ -197,8 +229,9 @@ async function applyStep(
         attempts: target.attempts + attemptsDelta,
       })
       .eq("id", target.id);
+    if (error) throw new Error(`Could not save published target: ${error.message}`);
   } else if (step.state === "processing") {
-    await supabase
+    const { error } = await supabase
       .from("social_post_targets")
       .update({
         status: "processing",
@@ -207,19 +240,23 @@ async function applyStep(
         attempts: target.attempts + attemptsDelta,
       })
       .eq("id", target.id);
+    if (error) throw new Error(`Could not save processing target: ${error.message}`);
   } else {
     const attempts = target.attempts + attemptsDelta;
     // Processing failures are terminal (the platform rejected the video);
-    // pending failures retry until MAX_ATTEMPTS in case it was transient.
-    const terminal = target.status !== "pending" || attempts >= MAX_ATTEMPTS;
-    await supabase
+    // pending failures retry until MAX_ATTEMPTS in case it was transient. A
+    // YouTube transport failure is explicitly retryable because its durable
+    // session can resume without creating another upload.
+    const terminal = (!step.retryable && target.status !== "pending") || attempts >= MAX_ATTEMPTS;
+    const { error } = await supabase
       .from("social_post_targets")
       .update({
-        status: terminal ? "failed" : "pending",
+        status: terminal ? "failed" : target.status === "processing" ? "processing" : "pending",
         error: step.error.slice(0, 1000),
         attempts,
       })
       .eq("id", target.id);
+    if (error) throw new Error(`Could not save failed target: ${error.message}`);
   }
 }
 
@@ -231,13 +268,26 @@ async function rollupPost(supabase: AdminClient, postId: string): Promise<void> 
     .eq("post_id", postId);
   if (!targets?.length) return;
 
-  const counts = { active: 0, published: 0, failed: 0 };
+  const counts = { inFlight: 0, pending: 0, published: 0, failed: 0 };
   for (const t of targets) {
-    if (["pending", "publishing", "processing"].includes(t.status)) counts.active++;
+    if (["publishing", "processing"].includes(t.status)) counts.inFlight++;
+    else if (t.status === "pending") counts.pending++;
     else if (t.status === "published") counts.published++;
     else if (t.status === "failed") counts.failed++;
   }
-  if (counts.active > 0) return;
+  if (counts.inFlight > 0) return;
+  if (counts.pending > 0) {
+    // Nothing is actually in flight at a platform — every remaining target is
+    // waiting on a retry. Demote back to "scheduled" so the post stays
+    // editable/cancellable instead of locked in "publishing" (a post stuck
+    // there previously needed manual DB surgery to recover, 2026-08-05).
+    await supabase
+      .from("social_posts")
+      .update({ status: "scheduled" })
+      .eq("id", postId)
+      .eq("status", "publishing");
+    return;
+  }
 
   const status =
     counts.published === 0 ? "failed" : counts.failed === 0 ? "published" : "partial";
@@ -255,7 +305,7 @@ async function rollupPost(supabase: AdminClient, postId: string): Promise<void> 
 
 export async function runSocialTick(
   supabase: AdminClient,
-  opts: { metricsOnly?: boolean; postId?: string } = {}
+  opts: { metricsOnly?: boolean; postId?: string; metricsForce?: boolean } = {}
 ): Promise<SocialTickSummary> {
   const summary: SocialTickSummary = {
     postsDue: 0,
@@ -288,7 +338,7 @@ export async function runSocialTick(
     let targetQuery = supabase
       .from("social_post_targets")
       .select("*, post:social_posts!inner(*), account:social_accounts(*)")
-      .in("status", ["pending", "processing"])
+      .in("status", ["pending", "publishing", "processing"])
       .eq("post.status", "publishing");
     if (opts.postId) targetQuery = targetQuery.eq("post_id", opts.postId);
     const { data: targets, error: targetsError } = await targetQuery;
@@ -314,14 +364,79 @@ export async function runSocialTick(
       }
     }
 
-    const touchedPosts = new Set<string>();
+    type LoadedTarget = SocialTarget & {
+      post: SocialPost;
+      account: SocialAccount | null;
+    };
+    const targetsByPost = new Map<string, LoadedTarget[]>();
     for (const row of targets || []) {
-      const target = row as unknown as SocialTarget & {
-        post: SocialPost;
-        account: SocialAccount | null;
-      };
-      touchedPosts.add(target.post_id);
+      const target = row as unknown as LoadedTarget;
+      targetsByPost.set(target.post_id, [...(targetsByPost.get(target.post_id) || []), target]);
+    }
+
+    const tallyStep = (step: PublishStep) => {
+      if (step.state === "published") summary.targetsPublished++;
+      else if (step.state === "processing") summary.targetsProcessing++;
+      else summary.targetsFailed++;
+    };
+
+    const workTarget = async (loadedTarget: LoadedTarget): Promise<void> => {
+      let target = loadedTarget;
+      // These change after a YouTube session is durably saved. If its immediate
+      // chunk upload fails, the catch path must preserve `processing` and the
+      // session ref instead of treating it like a new pending attempt.
+      let failureTarget: SocialTarget = target;
+      let failureAttemptsDelta = 1;
       try {
+        // Repair impossible-but-dangerous state before doing anything else.
+        // This also makes the anti-duplicate guard effective if an earlier DB
+        // update saved external_id but failed before saving status.
+        if (target.external_id) {
+          await applyStep(
+            supabase,
+            target,
+            {
+              state: "published",
+              externalId: target.external_id,
+              externalUrl:
+                target.external_url ||
+                (target.platform === "youtube"
+                  ? `https://www.youtube.com/shorts/${target.external_id}`
+                  : null),
+            },
+            0
+          );
+          summary.targetsPublished++;
+          return;
+        }
+
+        // `publishing` is a short lease used only while a worker is creating a
+        // new platform upload. A live lease means another tick owns it; a stale
+        // one is recovered using the presence of durable platform state.
+        if (target.status === "publishing") {
+          const leaseAge = Date.now() - new Date(target.updated_at).getTime();
+          if (leaseAge <= TARGET_LEASE_MS) return;
+          const recoveredStatus =
+            Object.keys((target.platform_ref || {}) as Record<string, unknown>).length > 0
+              ? "processing"
+              : "pending";
+          const { data: recovered, error: recoverError } = await supabase
+            .from("social_post_targets")
+            .update({ status: recoveredStatus, error: null })
+            .eq("id", target.id)
+            .eq("status", "publishing")
+            .eq("updated_at", target.updated_at)
+            .select("id")
+            .maybeSingle();
+          if (recoverError) throw new Error(`Could not recover stale target lease: ${recoverError.message}`);
+          if (!recovered) return;
+          target = {
+            ...target,
+            status: recoveredStatus,
+            updated_at: new Date().toISOString(),
+          };
+          failureTarget = target;
+        }
         // Carousels have no YouTube analogue — park the target as skipped
         // instead of failing the whole post.
         if (target.post.post_type === "carousel" && target.platform === "youtube") {
@@ -329,7 +444,7 @@ export async function runSocialTick(
             .from("social_post_targets")
             .update({ status: "skipped", error: null })
             .eq("id", target.id);
-          continue;
+          return;
         }
         if (!target.account) {
           await applyStep(
@@ -339,7 +454,22 @@ export async function runSocialTick(
             1
           );
           summary.targetsFailed++;
-          continue;
+          return;
+        }
+
+        // Claim a not-yet-started target atomically. Concurrent manual/cron
+        // ticks may load the same pending rows, but only one may call a
+        // platform's create-upload endpoint.
+        if (target.status === "pending") {
+          const { data: claimed, error: claimError } = await supabase
+            .from("social_post_targets")
+            .update({ status: "publishing", error: null })
+            .eq("id", target.id)
+            .eq("status", "pending")
+            .select("id")
+            .maybeSingle();
+          if (claimError) throw new Error(`Could not claim pending target: ${claimError.message}`);
+          if (!claimed) return;
         }
 
         let step: PublishStep;
@@ -361,30 +491,72 @@ export async function runSocialTick(
               : await continuePublish(target, target.account);
         }
         await applyStep(supabase, target, step, attemptsDelta);
-        if (step.state === "published") summary.targetsPublished++;
-        else if (step.state === "processing") summary.targetsProcessing++;
-        else summary.targetsFailed++;
+
+        // YouTube session creation is deliberately metadata-only. Once its ref
+        // is durable, upload the chunks immediately in this same publish call;
+        // a later tick can still resume safely from Google's accepted offset.
+        if (
+          target.platform === "youtube" &&
+          target.status === "pending" &&
+          step.state === "processing"
+        ) {
+          const persistedTarget: SocialTarget = {
+            ...target,
+            status: "processing",
+            platform_ref: step.ref as never,
+            attempts: target.attempts + attemptsDelta,
+            updated_at: new Date().toISOString(),
+          };
+          failureTarget = persistedTarget;
+          // Session creation and its first chunk transfer are one attempt.
+          failureAttemptsDelta = 0;
+          step = await continuePublish(persistedTarget, target.account);
+          await applyStep(supabase, persistedTarget, step, 0);
+        }
+        tallyStep(step);
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         summary.errors.push(`target ${target.id}: ${message}`);
         try {
-          await applyStep(supabase, target, { state: "failed", error: message }, 1);
-          summary.targetsFailed++;
+          const retryableYouTube =
+            failureTarget.platform === "youtube" && failureTarget.status === "processing";
+          const retryingYouTube =
+            retryableYouTube &&
+            failureTarget.attempts + failureAttemptsDelta < MAX_ATTEMPTS;
+          await applyStep(
+            supabase,
+            failureTarget,
+            {
+              state: "failed",
+              error: message,
+              // Transport/session failures can resume from Google's accepted
+              // offset. Never throw away a persisted YouTube session early.
+              retryable: retryableYouTube,
+            },
+            failureAttemptsDelta
+          );
+          if (retryingYouTube) summary.targetsProcessing++;
+          else summary.targetsFailed++;
         } catch {
           // row update failed too — leave for next tick
         }
       }
-    }
+    };
 
-    // 3. Roll up finished posts.
-    for (const postId of touchedPosts) {
+    // Different scheduled posts stay bounded, but every platform belonging to
+    // one post fans out together. A slow Meta API can no longer keep the other
+    // targets locally pending.
+    for (const [postId, postTargets] of targetsByPost) {
+      await Promise.all(postTargets.map(workTarget));
       await rollupPost(supabase, postId);
     }
   }
 
   // 4. Refresh performance numbers on recently published targets.
   try {
-    summary.metricsRefreshed = await refreshDueMetrics(supabase);
+    const metrics = await refreshDueMetrics(supabase, { force: Boolean(opts.metricsForce) });
+    summary.metricsRefreshed = metrics.refreshed;
+    summary.errors.push(...metrics.errors);
   } catch (e) {
     summary.errors.push(`metrics: ${e instanceof Error ? e.message : String(e)}`);
   }

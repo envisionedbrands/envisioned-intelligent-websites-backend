@@ -9,7 +9,7 @@
  *   node scripts/social-post.mjs list [--status scheduled] [--limit 20]
  *   node scripts/social-post.mjs create --caption "..." [options]
  *   node scripts/social-post.mjs publish <post-id>
- *   node scripts/social-post.mjs tick
+ *   node scripts/social-post.mjs tick [--post-id <post-id>]
  *
  * create options:
  *   --caption "text"           caption (or --caption-file path)
@@ -27,8 +27,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHmac, randomUUID } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -89,6 +89,14 @@ const MIME = {
 /** Instagram feed accepts 4:5 (0.8) through 1.91:1. */
 const IG_MIN_RATIO = 0.8;
 const IG_MAX_RATIO = 1.91;
+const TARGET_NORMALIZED_VIDEO_BYTES = 58 * 1024 * 1024;
+const MAX_NORMALIZED_VIDEO_BYTES = 60 * 1024 * 1024;
+const MAX_VIDEO_BITRATE = 8_000_000;
+
+function mediaTool(name) {
+  const bundled = join(homedir(), 'bin', name);
+  return existsSync(bundled) ? bundled : name;
+}
 
 /**
  * Mirror of the composer's upload-time normalization, via macOS sips:
@@ -121,31 +129,56 @@ function normalizeImage(filePath) {
 }
 
 /**
- * Facebook Reels hard-requires 9:16; iPhone screen recordings are 9:19.5 and
- * die in FB's transcoder. If ffmpeg is around, pad off-ratio videos onto a
- * 1080x1920 canvas (pillar/letterbox — no content lost) and re-encode H.264.
+ * Normalize every video, even when it is already 9:16. Raw screen captures can
+ * be 100–200 MB despite having the right dimensions; the bounded H.264 encode
+ * keeps a typical one-minute Reel around 55–60 MB and pads off-ratio inputs
+ * without cropping.
+ * Fail closed if ffmpeg is unavailable so an unsafe raw file cannot be queued.
  */
 function normalizeVideo(filePath) {
   try {
-    const probe = execFileSync('ffprobe', [
+    const probe = JSON.parse(execFileSync(mediaTool('ffprobe'), [
       '-v', 'error', '-select_streams', 'v:0',
-      '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0', filePath,
-    ]).toString().trim().split('\n')[0];
-    const [w, h] = probe.split('x').map(Number);
-    if (!w || !h || Math.abs(w / h - 9 / 16) <= 0.02) return { path: filePath, converted: false };
+      '-show_entries', 'stream=width,height:format=duration', '-of', 'json', filePath,
+    ]).toString());
+    const w = Number(probe.streams?.[0]?.width);
+    const h = Number(probe.streams?.[0]?.height);
+    const duration = Number(probe.format?.duration);
+    if (!w || !h || !Number.isFinite(duration) || duration <= 0) {
+      throw new Error('ffprobe could not read video dimensions and duration');
+    }
+    // Leave room for 128 kbps audio and container overhead. Longer Shorts get
+    // a lower ceiling so the normalized output remains safe for every API hop.
+    const sizeBoundBitrate = Math.floor((TARGET_NORMALIZED_VIDEO_BYTES * 8) / duration - 192_000);
+    const videoBitrate = Math.max(1_200_000, Math.min(MAX_VIDEO_BITRATE, sizeBoundBitrate));
     const out = join(tmpdir(), `social-post-${randomUUID()}.mp4`);
-    execFileSync('ffmpeg', [
+    execFileSync(mediaTool('ffmpeg'), [
       '-y', '-i', filePath,
       '-vf', 'scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black',
-      '-r', '30', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+      '-map', '0:v:0', '-map', '0:a?', '-r', '30',
+      '-c:v', 'libx264', '-preset', 'veryfast',
+      '-b:v', `${Math.floor(videoBitrate / 1000)}k`,
+      '-maxrate', `${Math.floor(videoBitrate / 1000)}k`,
+      '-bufsize', `${Math.floor((videoBitrate * 2) / 1000)}k`,
+      '-pix_fmt', 'yuv420p',
       '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
       out,
     ], { stdio: 'pipe' });
-    console.log(`  padded ${basename(filePath)} ${w}x${h} → 1080x1920 (Facebook needs 9:16)`);
+    const outputBytes = statSync(out).size;
+    const outputMb = outputBytes / 1024 / 1024;
+    if (outputBytes > MAX_NORMALIZED_VIDEO_BYTES) {
+      throw new Error(`normalized video is still ${outputMb.toFixed(1)} MB (60 MB safety limit)`);
+    }
+    console.log(
+      `  normalized ${basename(filePath)} ${w}x${h} → 1080x1920 H.264 ` +
+      `(${outputMb.toFixed(1)} MB, ≤${(videoBitrate / 1_000_000).toFixed(1)} Mbps)`
+    );
     return { path: out, converted: true };
   } catch (e) {
-    console.log(`  (video not normalized — uploading as-is: ${String(e.message).split('\n')[0]})`);
-    return { path: filePath, converted: false };
+    throw new Error(
+      `Video normalization failed for ${basename(filePath)}: ${String(e.message).split('\n')[0]}. ` +
+      `Install ffmpeg or export a 1080x1920 H.264 file under 60 MB.`
+    );
   }
 }
 
@@ -324,7 +357,9 @@ if (cmd === 'accounts') {
   const result = await api('POST', `/api/social/posts/${id}/publish`, {});
   console.log(JSON.stringify(result, null, 2));
 } else if (cmd === 'tick') {
-  const result = await api('POST', '/api/social/tick', {});
+  const result = await api('POST', '/api/social/tick', {
+    postId: args['post-id'] || undefined,
+  });
   console.log(JSON.stringify(result, null, 2));
 } else {
   console.error('Commands: accounts | list | create | publish <id> | tick');

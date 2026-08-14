@@ -276,22 +276,42 @@ export async function igCreateCarouselContainer(
 }
 
 export async function igFetchMetrics(mediaId: string, pageToken: string): Promise<MetricSnapshot> {
-  const data = await graph<{
-    data: Array<{ name: string; values?: Array<{ value?: number }> }>;
-  }>(`/${mediaId}/insights`, {
+  // Likes and comments live on the media object and need only instagram_basic,
+  // so they keep working even when insights are unavailable. Reach/views/saves
+  // come from /insights, which additionally requires instagram_manage_insights
+  // — a missing scope there must not throw away the engagement numbers.
+  const media = await graph<{ like_count?: number; comments_count?: number }>(`/${mediaId}`, {
     token: pageToken,
-    params: { metric: "views,reach,likes,comments,shares,saved" },
+    params: { fields: "like_count,comments_count" },
   });
-  const get = (name: string) =>
-    data.data?.find((m) => m.name === name)?.values?.[0]?.value ?? 0;
+
+  let insights: Array<{ name: string; values?: Array<{ value?: number }> }> = [];
+  let insightsError: string | null = null;
+  try {
+    const data = await graph<{
+      data: Array<{ name: string; values?: Array<{ value?: number }> }>;
+    }>(`/${mediaId}/insights`, {
+      token: pageToken,
+      params: { metric: "views,reach,saved,shares" },
+    });
+    insights = data.data || [];
+  } catch (e) {
+    insightsError = e instanceof Error ? e.message : String(e);
+  }
+  const get = (name: string) => insights.find((m) => m.name === name)?.values?.[0]?.value ?? 0;
   return {
     views: get("views"),
-    likes: get("likes"),
-    comments: get("comments"),
+    likes: media.like_count ?? 0,
+    comments: media.comments_count ?? 0,
     shares: get("shares"),
     saves: get("saved"),
     reach: get("reach"),
-    raw: { insights: data.data },
+    raw: {
+      insights,
+      like_count: media.like_count,
+      comments_count: media.comments_count,
+      insights_error: insightsError,
+    },
   };
 }
 
@@ -431,28 +451,58 @@ export async function fbFetchPostMetrics(
   postId: string,
   pageToken: string
 ): Promise<MetricSnapshot> {
-  const data = await graph<{
-    insights?: { data?: Array<{ name: string; values?: Array<{ value?: number }> }> };
-    likes?: { summary?: { total_count?: number } };
+  // post_impressions / post_impressions_unique were RETIRED from the Graph API
+  // — asking for them fails the entire call with (#100), which is what left
+  // Facebook with no metrics at all. Only request metrics that still exist.
+  let insights: Array<{ name: string; values?: Array<{ value?: unknown }> }> = [];
+  let insightsError: string | null = null;
+  try {
+    const data = await graph<{
+      data: Array<{ name: string; values?: Array<{ value?: unknown }> }>;
+    }>(`/${postId}/insights`, {
+      token: pageToken,
+      params: { metric: "post_reactions_by_type_total,post_clicks" },
+    });
+    insights = data.data || [];
+  } catch (e) {
+    insightsError = e instanceof Error ? e.message : String(e);
+  }
+  const val = (name: string) => insights.find((m) => m.name === name)?.values?.[0]?.value;
+  const reactions = (val("post_reactions_by_type_total") || {}) as Record<string, unknown>;
+  const reactionTotal = Object.values(reactions).reduce<number>(
+    (sum, n) => sum + (Number(n) || 0),
+    0
+  );
+
+  // Comment and share counts sit on the post object behind
+  // pages_read_engagement — tolerate losing them rather than the whole snapshot.
+  let engagement: {
     comments?: { summary?: { total_count?: number } };
     shares?: { count?: number };
-  }>(`/${postId}`, {
-    token: pageToken,
-    params: {
-      fields:
-        "insights.metric(post_impressions,post_impressions_unique){name,values},likes.summary(true).limit(0),comments.summary(true).limit(0),shares",
-    },
-  });
-  const insights = data.insights?.data || [];
-  const get = (name: string) => insights.find((m) => m.name === name)?.values?.[0]?.value ?? 0;
+  } = {};
+  let engagementError: string | null = null;
+  try {
+    engagement = await graph(`/${postId}`, {
+      token: pageToken,
+      params: { fields: "comments.summary(true).limit(0),shares" },
+    });
+  } catch (e) {
+    engagementError = e instanceof Error ? e.message : String(e);
+  }
+
   return {
-    views: get("post_impressions"),
-    likes: data.likes?.summary?.total_count ?? 0,
-    comments: data.comments?.summary?.total_count ?? 0,
-    shares: data.shares?.count ?? 0,
+    views: 0,
+    likes: reactionTotal,
+    comments: engagement.comments?.summary?.total_count ?? 0,
+    shares: engagement.shares?.count ?? 0,
     saves: 0,
-    reach: get("post_impressions_unique"),
-    raw: { insights, likes: data.likes?.summary, comments: data.comments?.summary, shares: data.shares },
+    reach: 0,
+    raw: {
+      insights,
+      clicks: val("post_clicks") ?? 0,
+      insights_error: insightsError,
+      engagement_error: engagementError,
+    },
   };
 }
 

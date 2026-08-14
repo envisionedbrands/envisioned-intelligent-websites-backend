@@ -91,9 +91,16 @@ alongside the CRM tick once this worker is deployed (needs the
    `https://<your-backend-domain>/api/social/oauth/meta`
 4. Permissions needed: `pages_show_list`, `pages_read_engagement`,
    `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`,
-   `read_insights`. While the app is in **Development mode** these work for
+   `read_insights`, and **`instagram_manage_insights`**. While the app is in **Development mode** these work for
    any user with a role on the app (add yourself as admin) — App Review is
    only needed to open it to outsiders, which you don't need.
+   > **Do not skip `instagram_manage_insights`.** It is NOT part of Meta's
+   > default scope set, and without it `/media/insights` returns
+   > `(#10) Application does not have permission for this action` — so reach,
+   > views and saves silently never arrive. Likes and comments still work
+   > (they come from the media object), which makes the gap easy to miss.
+   > Already connected without it? Re-mint the token with the extra scope
+   > ticked and reconnect; nothing else needs to change.
 5. The Instagram account must be a **professional (business/creator) account
    linked to the Facebook page** (Meta Business Suite → Instagram → connect).
 6. Hit **Connect Instagram + Facebook** on `/social/accounts`.

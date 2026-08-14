@@ -11,6 +11,7 @@
     "dev": "next dev -p ${PORT:-3001}",
     "start": "next start",
     "lint": "eslint",
+    "test:social-upload": "node --experimental-strip-types --test src/lib/social/youtube.test.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",

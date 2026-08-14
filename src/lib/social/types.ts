@@ -19,7 +19,7 @@ export type SocialPlatform = SocialAccount["platform"];
 export type PublishStep =
   | { state: "processing"; ref: Record<string, unknown> } // platform still ingesting; carry ref to next tick
   | { state: "published"; externalId: string; externalUrl: string | null }
-  | { state: "failed"; error: string };
+  | { state: "failed"; error: string; retryable?: boolean };
 
 /** Normalized per-video performance numbers; raw platform payload kept alongside. */
 export interface MetricSnapshot {

@@ -5,14 +5,25 @@
  * Auth model: one offline refresh_token per channel (Google OAuth with
  * access_type=offline). Access tokens are minted per tick and never stored.
  *
- * Upload path: unlike Meta, YouTube won't pull from a URL — we open the
- * hosted video and stream its body straight into a resumable upload session,
- * so nothing is buffered in worker memory.
+ * Upload path: unlike Meta, YouTube won't pull from a URL. We persist the
+ * resumable session URI before sending bytes, then copy the hosted video in
+ * small Content-Range chunks. A later tick can ask Google which bytes landed
+ * and resume without creating another video.
  */
 import type { MetricSnapshot } from "./types";
 
 const OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const YT = "https://www.googleapis.com/youtube/v3";
+const YT_UPLOAD = "https://www.googleapis.com/upload/youtube/v3/videos";
+/** YouTube requires chunk sizes to be multiples of 256 KiB. */
+export const YT_UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024;
+
+export interface YouTubeUploadRef {
+  youtube_upload_url: string;
+  video_url: string;
+  content_length: number;
+  content_type: string;
+}
 
 export function googleOAuthConfigured(): boolean {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
@@ -109,31 +120,47 @@ export async function ytOwnChannel(
   };
 }
 
-/**
- * Upload a hosted video to YouTube. Synchronous from our side — once the
- * bytes land, YouTube's own processing continues but the video id is final.
- */
-export async function ytUploadVideo(
+function youtubeVideoResult(data: unknown): { videoId: string; url: string } | null {
+  const videoId = (data as { id?: unknown } | null)?.id;
+  return typeof videoId === "string" && videoId
+    ? { videoId, url: `https://www.youtube.com/shorts/${videoId}` }
+    : null;
+}
+
+async function youtubeError(res: Response, prefix: string, parsed?: unknown): Promise<Error> {
+  const data = (parsed ?? (await res.json().catch(() => ({})))) as {
+    error?: { message?: string };
+  };
+  return new Error(`${prefix}: ${data.error?.message || `HTTP ${res.status}`}`);
+}
+
+/** Open a resumable session without sending video bytes. Persist the returned
+ * ref before calling ytResumeVideoUpload so a failed tick cannot create a
+ * second upload session. */
+export async function ytStartVideoUpload(
   accessToken: string,
   opts: { videoUrl: string; title: string; description: string }
-): Promise<{ videoId: string; url: string }> {
-  const source = await fetch(opts.videoUrl);
-  if (!source.ok || !source.body) {
+): Promise<YouTubeUploadRef> {
+  const source = await fetch(opts.videoUrl, { method: "HEAD" });
+  if (!source.ok) {
     throw new Error(`Could not read video from storage (HTTP ${source.status})`);
   }
   const contentLength = source.headers.get("content-length");
   if (!contentLength) throw new Error("Storage did not report a video size");
+  const size = Number(contentLength);
+  if (!Number.isSafeInteger(size) || size < 1) throw new Error("Storage reported an invalid video size");
+  const contentType = source.headers.get("content-type")?.split(";", 1)[0] || "video/mp4";
 
   // Session init: metadata only. Title caps at 100 chars on YouTube.
   const initRes = await fetch(
-    `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status`,
+    `${YT_UPLOAD}?uploadType=resumable&part=snippet,status`,
     {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length": contentLength,
-        "X-Upload-Content-Type": "video/mp4",
+        "X-Upload-Content-Length": String(size),
+        "X-Upload-Content-Type": contentType,
       },
       body: JSON.stringify({
         snippet: {
@@ -145,31 +172,112 @@ export async function ytUploadVideo(
       }),
     }
   );
-  if (!initRes.ok) {
-    const err = (await initRes.json().catch(() => ({}))) as { error?: { message?: string } };
-    throw new Error(`YouTube upload init failed: ${err.error?.message || `HTTP ${initRes.status}`}`);
-  }
+  if (!initRes.ok) throw await youtubeError(initRes, "YouTube upload init failed");
   const uploadUrl = initRes.headers.get("location");
   if (!uploadUrl) throw new Error("YouTube did not return a resumable upload URL");
 
-  const putRes = await fetch(uploadUrl, {
+  return {
+    youtube_upload_url: uploadUrl,
+    video_url: opts.videoUrl,
+    content_length: size,
+    content_type: contentType,
+  };
+}
+
+/** Google answers an empty Content-Range probe with 308 + Range while an
+ * upload is incomplete, or the final video resource if it already completed. */
+async function ytUploadedOffset(
+  accessToken: string,
+  ref: YouTubeUploadRef
+): Promise<{ offset: number; completed: { videoId: string; url: string } | null }> {
+  const res = await fetch(ref.youtube_upload_url, {
     method: "PUT",
     headers: {
-      "Content-Length": contentLength,
-      "Content-Type": "video/mp4",
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Length": "0",
+      "Content-Range": `bytes */${ref.content_length}`,
     },
-    body: source.body,
-    // Required for streaming request bodies under Node (next dev); harmless in workerd.
-    ...({ duplex: "half" } as Record<string, unknown>),
   });
-  const video = (await putRes.json().catch(() => ({}))) as {
-    id?: string;
-    error?: { message?: string };
-  };
-  if (!putRes.ok || !video.id) {
-    throw new Error(`YouTube upload failed: ${video.error?.message || `HTTP ${putRes.status}`}`);
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    const completed = youtubeVideoResult(data);
+    if (completed) return { offset: ref.content_length, completed };
   }
-  return { videoId: video.id, url: `https://www.youtube.com/shorts/${video.id}` };
+  if (res.status !== 308) {
+    throw await youtubeError(res, "YouTube upload status check failed", data);
+  }
+  const range = res.headers.get("range");
+  const match = range?.match(/bytes=0-(\d+)/i);
+  const offset = match ? Number(match[1]) + 1 : 0;
+  if (!Number.isSafeInteger(offset) || offset < 0 || offset > ref.content_length) {
+    throw new Error("YouTube returned an invalid resumable upload offset");
+  }
+  return { offset, completed: null };
+}
+
+/** Resume a persisted YouTube session. Each worker request buffers at most one
+ * 8 MiB chunk; retries always probe the server-side offset first. */
+export async function ytResumeVideoUpload(
+  accessToken: string,
+  ref: YouTubeUploadRef
+): Promise<{ videoId: string; url: string }> {
+  if (
+    !ref.youtube_upload_url ||
+    !ref.video_url ||
+    !Number.isSafeInteger(ref.content_length) ||
+    ref.content_length < 1
+  ) {
+    throw new Error("YouTube upload session data is incomplete");
+  }
+
+  const status = await ytUploadedOffset(accessToken, ref);
+  if (status.completed) return status.completed;
+
+  for (let offset = status.offset; offset < ref.content_length; ) {
+    const end = Math.min(offset + YT_UPLOAD_CHUNK_SIZE, ref.content_length) - 1;
+    const source = await fetch(ref.video_url, {
+      headers: { Range: `bytes=${offset}-${end}` },
+    });
+    if (!source.ok) {
+      throw new Error(`Could not read video chunk from storage (HTTP ${source.status})`);
+    }
+    const bytes = await source.arrayBuffer();
+    const expected = end - offset + 1;
+    if (bytes.byteLength !== expected) {
+      throw new Error(`Storage returned ${bytes.byteLength} bytes for a ${expected}-byte video chunk`);
+    }
+
+    const putRes = await fetch(ref.youtube_upload_url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Length": String(bytes.byteLength),
+        "Content-Type": ref.content_type || "video/mp4",
+        "Content-Range": `bytes ${offset}-${end}/${ref.content_length}`,
+      },
+      body: bytes,
+    });
+    const data = await putRes.json().catch(() => ({}));
+    if (putRes.ok) {
+      const completed = youtubeVideoResult(data);
+      if (completed) return completed;
+      throw new Error("YouTube accepted the final chunk but did not return a video id");
+    }
+    if (putRes.status !== 308) throw await youtubeError(putRes, "YouTube upload failed", data);
+
+    const accepted = putRes.headers.get("range")?.match(/bytes=0-(\d+)/i);
+    const nextOffset = accepted ? Number(accepted[1]) + 1 : end + 1;
+    if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > ref.content_length) {
+      throw new Error("YouTube did not advance the resumable upload offset");
+    }
+    offset = nextOffset;
+  }
+
+  // Defensive: the last response should carry the video resource, but querying
+  // once more avoids opening a new session if Google finalized asynchronously.
+  const finalStatus = await ytUploadedOffset(accessToken, ref);
+  if (finalStatus.completed) return finalStatus.completed;
+  throw new Error("YouTube upload finished sending bytes but is not finalized yet");
 }
 
 export async function ytFetchMetrics(

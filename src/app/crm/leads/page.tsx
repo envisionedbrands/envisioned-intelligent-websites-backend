@@ -43,6 +43,14 @@ const STATUSES = ['new', 'engaged', 'qualified', 'converted', 'lost'];
 // Keep this in sync with that setting; it is display-only, the server decides.
 const NO_EMAIL_TAGS = ['contact-only', 'peer', 'junk', 'internal'];
 
+type SortMode = 'created_at' | 'score' | 'last_activity_at';
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'created_at', label: 'Newest leads' },
+  { value: 'score', label: 'Hot / priority' },
+  { value: 'last_activity_at', label: 'Recent activity' },
+];
+
 // Minimal CSV parser (quotes + commas), good enough for GHL/spreadsheet exports
 function parseCsv(text: string): Record<string, string>[] {
   const rows: string[][] = [];
@@ -108,6 +116,7 @@ export default function LeadsPage() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+  const [sort, setSort] = useState<SortMode>('created_at');
   const [tags, setTags] = useState<{ name: string; count: number }[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -120,12 +129,13 @@ export default function LeadsPage() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(
-    async (opts?: { page?: number; q?: string; status?: string; tag?: string }) => {
+    async (opts?: { page?: number; q?: string; status?: string; tag?: string; sort?: SortMode }) => {
       const p = opts?.page ?? page;
       const qq = opts?.q ?? q;
       const st = opts?.status ?? status;
       const tg = opts?.tag ?? tagFilter;
-      const params = new URLSearchParams({ page: String(p), limit: '25' });
+      const so = opts?.sort ?? sort;
+      const params = new URLSearchParams({ page: String(p), limit: '25', sort: so, dir: 'desc' });
       if (qq) params.set('q', qq);
       if (st) params.set('status', st);
       if (tg) params.set('tag', tg);
@@ -138,7 +148,7 @@ export default function LeadsPage() {
         setLeads([]);
       }
     },
-    [page, q, status, tagFilter, show]
+    [page, q, status, tagFilter, sort, show]
   );
 
   useEffect(() => {
@@ -260,6 +270,24 @@ export default function LeadsPage() {
         <div className="w-72">
           <TextInput placeholder="Search email, name, company…" value={q} onChange={(e) => onSearch(e.target.value)} />
         </div>
+        <div className="w-44">
+          <Select
+            value={sort}
+            aria-label="Sort leads"
+            onChange={(e) => {
+              const nextSort = e.target.value as SortMode;
+              setSort(nextSort);
+              setPage(1);
+              load({ page: 1, sort: nextSort });
+            }}
+          >
+            {SORT_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
         <div className="w-40">
           <Select
             value={status}
@@ -321,6 +349,7 @@ export default function LeadsPage() {
                   </th>
                   <th className="px-5 py-3 font-medium">Lead</th>
                   <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium text-right">Score</th>
                   <th className="px-5 py-3 font-medium">Tags</th>
                   <th className="px-5 py-3 font-medium">Source</th>
                   <th className="px-5 py-3 font-medium text-right">Last activity</th>
@@ -356,6 +385,9 @@ export default function LeadsPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusDot status={lead.status} />
+                    </td>
+                    <td className="px-5 py-3.5 text-[13px] text-zinc-400 text-right tabular-nums">
+                      {lead.score}
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex flex-wrap gap-1.5 max-w-56">

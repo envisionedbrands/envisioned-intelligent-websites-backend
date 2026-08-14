@@ -233,8 +233,147 @@ function readVideoDims(file: File): Promise<{ w: number; h: number } | null> {
   });
 }
 
+const NORMALIZED_VIDEO_WIDTH = 1080;
+const NORMALIZED_VIDEO_HEIGHT = 1920;
+const TARGET_NORMALIZED_VIDEO_BYTES = 58 * 1024 * 1024;
+const MAX_NORMALIZED_VIDEO_BYTES = 60 * 1024 * 1024;
+const MAX_VIDEO_BITRATE = 8_000_000;
+
+function supportedMp4RecorderType(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  return [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=h264,aac',
+    'video/mp4',
+  ].find((type) => MediaRecorder.isTypeSupported(type)) || null;
+}
+
+/**
+ * Browser-side video normalization for the Cloudflare-hosted studio. Workers
+ * cannot run ffmpeg, so the selected file is played through a 1080x1920 canvas
+ * and recorded as bounded-bitrate H.264 before any bytes reach R2. This is
+ * deliberately fail-closed: uploading the raw file recreates the 413/timeout
+ * incident this seam exists to prevent.
+ */
+async function normalizeVideo(
+  file: File,
+  onProgress: (pct: number) => void
+): Promise<File> {
+  const mimeType = supportedMp4RecorderType();
+  if (!mimeType || typeof HTMLCanvasElement.prototype.captureStream !== 'function') {
+    throw new Error(
+      'This browser cannot compress video to H.264. Use current Chrome or Safari, or export a 1080×1920 H.264 MP4 under 60 MB.'
+    );
+  }
+
+  const objectUrl = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.preload = 'auto';
+  video.playsInline = true;
+  video.src = objectUrl;
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error(`${file.name} is not a readable video`));
+  });
+  if (!Number.isFinite(video.duration) || video.duration <= 0 || !video.videoWidth || !video.videoHeight) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error(`${file.name} has invalid video metadata`);
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = NORMALIZED_VIDEO_WIDTH;
+  canvas.height = NORMALIZED_VIDEO_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error('Could not start the browser video encoder');
+  }
+  const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+  const drawW = Math.round(video.videoWidth * scale);
+  const drawH = Math.round(video.videoHeight * scale);
+  const drawX = Math.round((canvas.width - drawW) / 2);
+  const drawY = Math.round((canvas.height - drawH) / 2);
+
+  const canvasStream = canvas.captureStream(30);
+  let audioContext: AudioContext | null = null;
+  let outputStream: MediaStream = canvasStream;
+  try {
+    audioContext = new AudioContext();
+    const audioSource = audioContext.createMediaElementSource(video);
+    const audioOutput = audioContext.createMediaStreamDestination();
+    audioSource.connect(audioOutput);
+    outputStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioOutput.stream.getAudioTracks(),
+    ]);
+  } catch {
+    // Silent videos and restrictive browsers can still produce a valid MP4.
+  }
+
+  // Keep enough room for 128 kbps audio and MP4 overhead. Long Shorts receive
+  // a lower ceiling so the result stays below the same safe payload limit.
+  const sizeBoundBitrate = Math.floor((TARGET_NORMALIZED_VIDEO_BYTES * 8) / video.duration - 192_000);
+  const videoBitsPerSecond = Math.max(1_200_000, Math.min(MAX_VIDEO_BITRATE, sizeBoundBitrate));
+  const recorder = new MediaRecorder(outputStream, {
+    mimeType,
+    videoBitsPerSecond,
+    audioBitsPerSecond: 128_000,
+  });
+  const chunks: Blob[] = [];
+  const stopped = new Promise<void>((resolve, reject) => {
+    recorder.ondataavailable = (event) => {
+      if (event.data.size) chunks.push(event.data);
+    };
+    recorder.onerror = () => reject(new Error('The browser video encoder failed'));
+    recorder.onstop = () => resolve();
+  });
+
+  let frame = 0;
+  const draw = () => {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(video, drawX, drawY, drawW, drawH);
+    if (!video.ended && !video.paused) frame = requestAnimationFrame(draw);
+  };
+
+  try {
+    video.ontimeupdate = () => onProgress(Math.min(99, Math.round((video.currentTime / video.duration) * 100)));
+    video.onended = () => {
+      cancelAnimationFrame(frame);
+      if (recorder.state !== 'inactive') recorder.stop();
+    };
+    recorder.start(1000);
+    await audioContext?.resume();
+    await video.play();
+    draw();
+    await stopped;
+  } catch (error) {
+    if (recorder.state !== 'inactive') recorder.stop();
+    throw error;
+  } finally {
+    cancelAnimationFrame(frame);
+    video.pause();
+    canvasStream.getTracks().forEach((track) => track.stop());
+    outputStream.getTracks().forEach((track) => track.stop());
+    await audioContext?.close().catch(() => {});
+    URL.revokeObjectURL(objectUrl);
+  }
+
+  const blob = new Blob(chunks, { type: 'video/mp4' });
+  if (!blob.size) throw new Error('The browser video encoder produced an empty file');
+  if (blob.size > MAX_NORMALIZED_VIDEO_BYTES) {
+    throw new Error(
+      `Compressed video is ${(blob.size / 1024 / 1024).toFixed(1)} MB. Export an H.264 MP4 under 60 MB before scheduling.`
+    );
+  }
+  const stem = file.name.replace(/\.[^.]+$/, '') || 'reel';
+  onProgress(100);
+  return new File([blob], `${stem}-social.mp4`, { type: 'video/mp4' });
+}
+
 function useVideoUpload(show: (t: string, k?: 'ok' | 'err') => void) {
   const [progress, setProgress] = useState<number | null>(null);
+  const [phase, setPhase] = useState<'compressing' | 'uploading' | null>(null);
   const [video, setVideo] = useState<{ path: string; publicUrl: string } | null>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   // Kept on screen under the slot — a toast alone is easy to miss and the
@@ -247,11 +386,18 @@ function useVideoUpload(show: (t: string, k?: 'ok' | 'err') => void) {
       setError(null);
       setDims(null);
       try {
-        readVideoDims(file).then(setDims);
-        setVideo(await uploadToStorage(file, setProgress));
+        setDims(await readVideoDims(file));
+        setPhase('compressing');
+        const normalized = await normalizeVideo(file, (pct) => setProgress(Math.round(pct / 2)));
+        setPhase('uploading');
+        setVideo(
+          await uploadToStorage(normalized, (pct) => setProgress(50 + Math.round(pct / 2)))
+        );
         setProgress(null);
+        setPhase(null);
       } catch (e) {
         setProgress(null);
+        setPhase(null);
         const message = e instanceof Error ? e.message : 'Upload failed';
         setError(message);
         show(message, 'err');
@@ -260,7 +406,7 @@ function useVideoUpload(show: (t: string, k?: 'ok' | 'err') => void) {
     [show]
   );
 
-  return { progress, video, setVideo, upload, error, dims };
+  return { progress, phase, video, setVideo, upload, error, dims };
 }
 
 // ── composer ─────────────────────────────────────────────────────────────────
@@ -301,13 +447,10 @@ function Composer({
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const slideInput = useRef<HTMLInputElement>(null);
-  const { progress, video, setVideo, upload, error: videoError, dims: videoDims } = useVideoUpload(show);
-  // Facebook Reels hard-requires 9:16; IG and YouTube adapt. iPhone screen
-  // recordings are 9:19.5 and die in FB's transcoder with a generic error.
-  const aspectWarning =
-    videoDims && Math.abs(videoDims.w / videoDims.h - 9 / 16) > 0.02
-      ? `This video is ${videoDims.w}×${videoDims.h} — not 9:16. Facebook Reels will reject it (Instagram and YouTube adapt). Export at 1080×1920, or untick Facebook.`
-      : null;
+  const { progress, phase: videoPhase, video, setVideo, upload, error: videoError, dims: videoDims } = useVideoUpload(show);
+  const normalizationNote = videoDims
+    ? `Normalized from ${videoDims.w}×${videoDims.h} to 1080×1920 H.264 before upload.`
+    : null;
 
   const [slides, setSlides] = useState<Slide[]>(
     (editing?.media || []).map((m: MediaRow) => ({ path: m.path, url: m.url }))
@@ -488,6 +631,7 @@ function Composer({
               <button
                 type="button"
                 onClick={() => fileInput.current?.click()}
+                disabled={progress !== null}
                 className="w-full aspect-[9/16] border border-dashed border-minimal-border rounded-xl overflow-hidden relative hover:border-zinc-500 transition-colors bg-minimal-row"
               >
                 {video ? (
@@ -502,6 +646,7 @@ function Composer({
                     {progress !== null ? (
                       <>
                         <span className="font-semibold text-white">{progress}%</span>
+                        <span>{videoPhase === 'compressing' ? 'Compressing…' : 'Uploading…'}</span>
                         <span className="w-24 h-1 rounded bg-minimal-border overflow-hidden">
                           <span
                             className="block h-full bg-white transition-[width]"
@@ -531,8 +676,8 @@ function Composer({
               {videoError && (
                 <p className="text-[11px] text-red-400 leading-snug">{videoError}</p>
               )}
-              {!videoError && aspectWarning && (
-                <p className="text-[11px] text-yellow-500 leading-snug">{aspectWarning}</p>
+              {!videoError && normalizationNote && (
+                <p className="text-[11px] text-zinc-500 leading-snug">{normalizationNote}</p>
               )}
             </>
           ) : (
@@ -874,6 +1019,23 @@ function PostDetail({
               </PrimaryBtn>
             )}
             {editable && <GhostBtn onClick={onEdit}>Edit</GhostBtn>}
+            {['scheduled', 'canceled', 'failed'].includes(post.status) && (
+              <GhostBtn
+                disabled={busy}
+                onClick={() =>
+                  act(
+                    () =>
+                      api(`/api/social/posts/${post.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ status: 'draft' }),
+                      }),
+                    'Moved to draft'
+                  )
+                }
+              >
+                Move to draft
+              </GhostBtn>
+            )}
             {post.status === 'scheduled' && (
               <GhostBtn
                 disabled={busy}
