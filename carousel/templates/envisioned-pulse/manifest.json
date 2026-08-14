@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "template_id": "envisioned-pulse",
+  "template_version": "1.0.0",
+  "canvas": { "width": 1080, "height": 1440 },
+  "slide_count": 8,
+  "tokens": {
+    "font_serif": "Newsreader",
+    "font_sans": "DM Sans",
+    "font_kicker": "Courier Prime",
+    "ivory": "#F5F0E6",
+    "ink": "#3D3D38",
+    "olive_deep": "#5C5C44",
+    "terracotta": "#B87A5D",
+    "peach": "#E8C4A8",
+    "glass_rule": "Frosted pane (rgba(61,61,56,.22) + blur 26px) behind type on FULL-BLEED photo slides ONLY. Faded-wash pages stay bare. Locked by MI 2026-08-14.",
+    "minimum_heading_size": 54,
+    "minimum_body_size": 30
+  },
+  "variants": [
+    {
+      "id": "photo-hook-glass",
+      "roles": ["hook"],
+      "requires_image": true,
+      "human_rule": "none",
+      "rotation_group": "hooks",
+      "image_regions": [{ "id": "bg", "x": 0, "y": 0, "width": 1080, "height": 1440, "fit": "cover" }],
+      "text_regions": [
+        { "id": "eyebrow", "purpose": "eyebrow", "x": 84, "y": 84, "width": 700, "height": 40, "max_characters": 40, "max_lines": 1, "min_font_size": 25 },
+        { "id": "heading", "purpose": "heading", "x": 84, "y": 780, "width": 912, "height": 420, "max_characters": 95, "max_lines": 5, "min_font_size": 84, "safe_padding": 24 },
+        { "id": "standfirst", "purpose": "body", "x": 84, "y": 1220, "width": 860, "height": 140, "max_characters": 130, "max_lines": 3, "min_font_size": 34 }
+      ]
+    },
+    {
+      "id": "wash-statement",
+      "roles": ["hook-continuation", "definition", "statement", "proof", "contrast"],
+      "requires_image": false,
+      "human_rule": "none",
+      "rotation_group": "text",
+      "text_regions": [
+        { "id": "kicker", "purpose": "eyebrow", "x": 90, "y": 96, "width": 700, "height": 40, "max_characters": 36, "max_lines": 1, "min_font_size": 25 },
+        { "id": "section", "purpose": "eyebrow", "x": 90, "y": 520, "width": 800, "height": 40, "max_characters": 34, "max_lines": 1, "min_font_size": 25 },
+        { "id": "heading", "purpose": "heading", "x": 90, "y": 590, "width": 900, "height": 360, "max_characters": 110, "max_lines": 4, "min_font_size": 66, "safe_padding": 20 },
+        { "id": "body", "purpose": "body", "x": 90, "y": 980, "width": 820, "height": 260, "max_characters": 240, "max_lines": 6, "min_font_size": 32 }
+      ]
+    },
+    {
+      "id": "wash-roman-list",
+      "roles": ["inventory", "sequence"],
+      "requires_image": false,
+      "human_rule": "none",
+      "rotation_group": "text",
+      "text_regions": [
+        { "id": "kicker", "purpose": "eyebrow", "x": 90, "y": 96, "width": 700, "height": 40, "max_characters": 36, "max_lines": 1, "min_font_size": 25 },
+        { "id": "section", "purpose": "eyebrow", "x": 90, "y": 300, "width": 800, "height": 40, "max_characters": 34, "max_lines": 1, "min_font_size": 25 },
+        { "id": "heading", "purpose": "heading", "x": 90, "y": 370, "width": 900, "height": 200, "max_characters": 70, "max_lines": 2, "min_font_size": 60, "safe_padding": 20 },
+        { "id": "item1", "purpose": "body", "x": 170, "y": 640, "width": 820, "height": 90, "max_characters": 80, "max_lines": 2, "min_font_size": 34 },
+        { "id": "item2", "purpose": "body", "x": 170, "y": 760, "width": 820, "height": 90, "max_characters": 80, "max_lines": 2, "min_font_size": 34 },
+        { "id": "item3", "purpose": "body", "x": 170, "y": 880, "width": 820, "height": 90, "max_characters": 80, "max_lines": 2, "min_font_size": 34 },
+        { "id": "item4", "purpose": "body", "x": 170, "y": 1000, "width": 820, "height": 90, "max_characters": 80, "max_lines": 2, "min_font_size": 34 },
+        { "id": "item5", "purpose": "body", "x": 170, "y": 1120, "width": 820, "height": 90, "max_characters": 80, "max_lines": 2, "min_font_size": 34 }
+      ]
+    },
+    {
+      "id": "wash-stats",
+      "roles": ["proof", "contrast"],
+      "requires_image": false,
+      "human_rule": "none",
+      "rotation_group": "text",
+      "text_regions": [
+        { "id": "kicker", "purpose": "eyebrow", "x": 90, "y": 96, "width": 700, "height": 40, "max_characters": 36, "max_lines": 1, "min_font_size": 25 },
+        { "id": "stat1", "purpose": "heading", "x": 90, "y": 330, "width": 260, "height": 170, "max_characters": 4, "max_lines": 1, "min_font_size": 130 },
+        { "id": "caption1", "purpose": "body", "x": 380, "y": 400, "width": 600, "height": 120, "max_characters": 90, "max_lines": 3, "min_font_size": 32 },
+        { "id": "stat2", "purpose": "heading", "x": 90, "y": 660, "width": 260, "height": 170, "max_characters": 4, "max_lines": 1, "min_font_size": 130 },
+        { "id": "caption2", "purpose": "body", "x": 380, "y": 730, "width": 600, "height": 120, "max_characters": 90, "max_lines": 3, "min_font_size": 32 },
+        { "id": "stat3", "purpose": "heading", "x": 90, "y": 990, "width": 260, "height": 170, "max_characters": 4, "max_lines": 1, "min_font_size": 130 },
+        { "id": "caption3", "purpose": "body", "x": 380, "y": 1060, "width": 600, "height": 120, "max_characters": 90, "max_lines": 3, "min_font_size": 32 }
+      ]
+    },
+    {
+      "id": "olive-statement",
+      "roles": ["statement", "contrast", "definition"],
+      "requires_image": false,
+      "human_rule": "none",
+      "rotation_group": "statement-blocks",
+      "text_regions": [
+        { "id": "kicker", "purpose": "eyebrow", "x": 90, "y": 96, "width": 700, "height": 40, "max_characters": 36, "max_lines": 1, "min_font_size": 25 },
+        { "id": "heading", "purpose": "heading", "x": 90, "y": 480, "width": 900, "height": 520, "max_characters": 120, "max_lines": 5, "min_font_size": 80, "safe_padding": 24 }
+      ]
+    },
+    {
+      "id": "photo-plate",
+      "roles": ["proof", "statement"],
+      "requires_image": true,
+      "human_rule": "none",
+      "rotation_group": "photo-beats",
+      "image_regions": [{ "id": "bg", "x": 0, "y": 0, "width": 1080, "height": 1440, "fit": "cover", "subject_safe_region": { "x": 70, "y": 900, "width": 640, "height": 450 } }],
+      "text_regions": [
+        { "id": "eyebrow", "purpose": "eyebrow", "x": 128, "y": 990, "width": 520, "height": 36, "max_characters": 30, "max_lines": 1, "min_font_size": 22 },
+        { "id": "heading", "purpose": "heading", "x": 128, "y": 1040, "width": 520, "height": 260, "max_characters": 90, "max_lines": 4, "min_font_size": 44 }
+      ]
+    },
+    {
+      "id": "photo-cta-glass",
+      "roles": ["cta", "identity-close"],
+      "requires_image": true,
+      "human_rule": "none",
+      "rotation_group": "closes",
+      "image_regions": [{ "id": "bg", "x": 0, "y": 0, "width": 1080, "height": 1440, "fit": "cover" }],
+      "text_regions": [
+        { "id": "eyebrow", "purpose": "eyebrow", "x": 84, "y": 84, "width": 700, "height": 40, "max_characters": 40, "max_lines": 1, "min_font_size": 25 },
+        { "id": "lede", "purpose": "body", "x": 84, "y": 950, "width": 820, "height": 150, "max_characters": 160, "max_lines": 4, "min_font_size": 34 },
+        { "id": "cta", "purpose": "cta", "x": 84, "y": 1120, "width": 912, "height": 170, "max_characters": 20, "max_lines": 1, "min_font_size": 110 }
+      ]
+    }
+  ]
+}

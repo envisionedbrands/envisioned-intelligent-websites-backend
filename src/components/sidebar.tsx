@@ -34,6 +34,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/carousel',
+    label: 'Carousels',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M216,48H72A16,16,0,0,0,56,64V80H40A16,16,0,0,0,24,96V208a16,16,0,0,0,16,16H184a16,16,0,0,0,16-16V192h16a16,16,0,0,0,16-16V64A16,16,0,0,0,216,48ZM184,208H40V96H184V208Zm32-32H200V96a16,16,0,0,0-16-16H72V64H216Z"/>
+      </svg>
+    ),
+  },
+  {
     href: '/crm',
     label: 'CRM',
     icon: (
