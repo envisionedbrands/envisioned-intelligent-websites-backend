@@ -1734,6 +1734,10 @@ export type Database = {
           raw: Json | null;
           reminder_24h_sent_at: string | null;
           reminder_1h_sent_at: string | null;
+          event_type_id: string | null;
+          booking_token: string | null;
+          guest_timezone: string | null;
+          guest_notes: string | null;
           updated_at: string | null;
           created_at: string;
         };
@@ -1756,6 +1760,10 @@ export type Database = {
           raw?: Json | null;
           reminder_24h_sent_at?: string | null;
           reminder_1h_sent_at?: string | null;
+          event_type_id?: string | null;
+          booking_token?: string | null;
+          guest_timezone?: string | null;
+          guest_notes?: string | null;
           updated_at?: string | null;
           created_at?: string;
         };
@@ -1778,6 +1786,10 @@ export type Database = {
           raw?: Json | null;
           reminder_24h_sent_at?: string | null;
           reminder_1h_sent_at?: string | null;
+          event_type_id?: string | null;
+          booking_token?: string | null;
+          guest_timezone?: string | null;
+          guest_notes?: string | null;
           updated_at?: string | null;
           created_at?: string;
         };
@@ -1918,6 +1930,123 @@ export type Database = {
           page_url?: string | null;
           referrer?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      booking_event_types: {
+        Row: {
+          id: string;
+          slug: string;
+          name: string;
+          description: string | null;
+          duration_minutes: number;
+          gap_minutes: number;
+          lead_time_hours: number;
+          booking_window_days: number;
+          max_per_day: number | null;
+          max_per_month: number | null;
+          price_cents: number;
+          currency: string;
+          location_kind: string;
+          meeting_url: string | null;
+          confirmation_note: string | null;
+          is_public: boolean;
+          is_active: boolean;
+          sort_order: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          name: string;
+          description?: string | null;
+          duration_minutes?: number;
+          gap_minutes?: number;
+          lead_time_hours?: number;
+          booking_window_days?: number;
+          max_per_day?: number | null;
+          max_per_month?: number | null;
+          price_cents?: number;
+          currency?: string;
+          location_kind?: string;
+          meeting_url?: string | null;
+          confirmation_note?: string | null;
+          is_public?: boolean;
+          is_active?: boolean;
+          sort_order?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          slug?: string;
+          name?: string;
+          description?: string | null;
+          duration_minutes?: number;
+          gap_minutes?: number;
+          lead_time_hours?: number;
+          booking_window_days?: number;
+          max_per_day?: number | null;
+          max_per_month?: number | null;
+          price_cents?: number;
+          currency?: string;
+          location_kind?: string;
+          meeting_url?: string | null;
+          confirmation_note?: string | null;
+          is_public?: boolean;
+          is_active?: boolean;
+          sort_order?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      booking_availability: {
+        Row: {
+          id: string;
+          event_type_id: string;
+          day_of_week: number;
+          start_minute: number;
+          end_minute: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_type_id: string;
+          day_of_week: number;
+          start_minute: number;
+          end_minute: number;
+          created_at?: string;
+        };
+        Update: {
+          event_type_id?: string;
+          day_of_week?: number;
+          start_minute?: number;
+          end_minute?: number;
+        };
+        Relationships: [];
+      };
+      booking_blackouts: {
+        Row: {
+          id: string;
+          event_type_id: string | null;
+          starts_at: string;
+          ends_at: string;
+          reason: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_type_id?: string | null;
+          starts_at: string;
+          ends_at: string;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          event_type_id?: string | null;
+          starts_at?: string;
+          ends_at?: string;
+          reason?: string | null;
         };
         Relationships: [];
       };
