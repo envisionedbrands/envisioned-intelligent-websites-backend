@@ -81,6 +81,19 @@ function str(v: unknown): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
+/**
+ * dm_funnels is absent from the generated database types (migration 300 is
+ * newer than the last type sync, and that file must stay byte-identical
+ * between this repo and the Frontend). This is the one sanctioned escape
+ * hatch, kept to a single expression so the untyping doesn't spread — same
+ * approach as lib/social/dm-funnel.ts.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function dmTable(supabase: AdminClient): any {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (supabase as any).from("dm_funnels");
+}
+
 async function findLead(supabase: AdminClient, input: Record<string, unknown>) {
   const email = str(input.email).toLowerCase();
   const id = str(input.lead_id);
@@ -573,6 +586,116 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         description: { type: "string", description: "What and why" },
       },
       required: ["title", "description"],
+    },
+  },
+  {
+    name: "create_dm_funnel",
+    description:
+      "Create an Instagram comment→DM funnel: someone comments or DMs the keyword, they get a private message, optionally must follow, hand over their email, and receive the link in the DM plus the asset by email — with the lead landing in the CRM tagged. ALWAYS created as a DRAFT; activating it is a separate, owner-approved step because an active funnel messages real people. Write the DM copy in Maria-Ines's voice: short lines, no exclamation stacking, no 'Hey lovely'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Internal name, e.g. 'Integration Map waitlist'" },
+        keyword: {
+          type: "string",
+          description:
+            "The trigger word, one word, no spaces (e.g. MAP). Matched whole-word and case-insensitively, so it won't fire inside a longer word.",
+        },
+        opening_dm: {
+          type: "string",
+          description:
+            "The private message sent the moment they comment. This is the ONE message allowed before they reply, so it must ask them to reply. Supports {{first_name}}.",
+        },
+        welcome_dm: {
+          type: "string",
+          description:
+            "The hello for people who DM the keyword directly instead of commenting — they never see opening_dm, because that one is a reply to a comment. Optional but strongly recommended: without it, the first thing a stranger hears from the account is a request for their email. Sent once, when their first message starts the run. Supports {{first_name}}.",
+        },
+        delivery_dm: {
+          type: "string",
+          description: "The message that delivers the link. Supports {{first_name}} and {{link}}.",
+        },
+        delivery_link: { type: "string", description: "The URL being delivered" },
+        public_comment_reply: {
+          type: "string",
+          description: "Optional public reply under their comment, e.g. 'sent — check your DMs'",
+        },
+        email_prompt_dm: {
+          type: "string",
+          description:
+            "The line that asks for their email address. REQUIRED unless you set ask_email to false — without it the funnel stalls silently after the opening message.",
+        },
+        follow_prompt_dm: {
+          type: "string",
+          description:
+            "Sent when they don't follow yet. REQUIRED when require_follow is true. Ask once, warmly, and tell them to reply when done.",
+        },
+        already_done_dm: {
+          type: "string",
+          description:
+            "Optional. Sent when someone triggers a funnel they've already completed. Omit to stay silent, which is usually better than a second robotic message.",
+        },
+        require_follow: {
+          type: "boolean",
+          description: "Gate delivery on them following the account. Default false.",
+        },
+        ask_email: {
+          type: "boolean",
+          description: "Collect their email before delivering. Default true.",
+        },
+        skip_email_if_known: {
+          type: "boolean",
+          description:
+            "Default TRUE, and should almost always stay true. When we already hold this person's email, deliver straight away instead of asking again — a returning reader who comments gets the link in the very first message. Set false only when the funnel genuinely needs the address re-confirmed.",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Tags applied to the lead on capture, e.g. ['ig-dm','map-waitlist']",
+        },
+        trigger_source: {
+          type: "string",
+          enum: ["comment", "dm", "both"],
+          description: "What can trigger it. Default 'both'.",
+        },
+        media_id: {
+          type: "string",
+          description: "Optional: restrict to one post/reel. Omit to work on any post.",
+        },
+        email_template_id: {
+          type: "string",
+          description: "Optional email_templates UUID — the asset emailed on capture",
+        },
+        enroll_workflow_id: {
+          type: "string",
+          description: "Optional workflows UUID to enroll the new lead into",
+        },
+      },
+      required: ["name", "keyword", "opening_dm", "delivery_dm"],
+    },
+  },
+  {
+    name: "list_dm_funnels",
+    description:
+      "List DM funnels with their status, keyword and performance (triggered / emails captured / delivered). Use before creating one to avoid a keyword collision.",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["draft", "active", "paused"] },
+      },
+    },
+  },
+  {
+    name: "propose_dm_funnel_activation",
+    description:
+      "Propose making a draft DM funnel live. Goes to the approvals queue — activation is the owner's call because a live funnel sends real messages to real people.",
+    input_schema: {
+      type: "object",
+      properties: {
+        funnel_id: { type: "string", description: "dm_funnels UUID" },
+        reason: { type: "string", description: "One line: why activate this now" },
+      },
+      required: ["funnel_id", "reason"],
     },
   },
 ];
@@ -1686,6 +1809,202 @@ const executors: Record<string, Executor> = {
       .single();
     if (error || !action) throw new Error(`Failed to queue action: ${error?.message}`);
     return { data: { action_id: action.id, status: "proposed" }, summary: `Proposed: ${title}` };
+  },
+
+  // ── DM funnels ─────────────────────────────────────────────────────────────
+
+  async create_dm_funnel(input, { supabase }) {
+    const name = str(input.name);
+    const keyword = str(input.keyword).toLowerCase();
+    const openingDm = str(input.opening_dm);
+    const deliveryDm = str(input.delivery_dm);
+
+    if (!name) throw new Error("name is required");
+    if (!keyword) throw new Error("keyword is required");
+    if (!openingDm) throw new Error("opening_dm is required — it's the only message we get to send before they reply");
+    if (!deliveryDm) throw new Error("delivery_dm is required");
+    // A keyword with a space can never be matched reliably against a comment.
+    if (/\s/.test(keyword)) throw new Error(`keyword must be a single word — got "${keyword}"`);
+
+    const askEmail = input.ask_email === undefined ? true : Boolean(input.ask_email);
+    const skipIfKnown =
+      input.skip_email_if_known === undefined ? true : Boolean(input.skip_email_if_known);
+    const requireFollow = Boolean(input.require_follow);
+    const deliveryLink = str(input.delivery_link);
+
+    // Asking for an email with no prompt written leaves the funnel silently
+    // stuck at awaiting_email, which looks like the bot ghosted them.
+    const emailPrompt = str(input.email_prompt_dm);
+    if (askEmail && !emailPrompt) {
+      throw new Error("ask_email is on, so email_prompt_dm is required — write the line that asks for their address");
+    }
+    const followPrompt = str(input.follow_prompt_dm);
+    if (requireFollow && !followPrompt) {
+      throw new Error("require_follow is on, so follow_prompt_dm is required");
+    }
+
+    const funnels = dmTable(supabase);
+
+    // Only ACTIVE funnels collide (the unique index is partial), but a draft on
+    // the same word is still worth flagging — it usually means a duplicate.
+    const { data: existing } = await funnels
+      .select("id, name, status")
+      .ilike("keyword", keyword);
+    const live = (existing || []).find((f: { status: string }) => f.status === "active");
+    if (live) {
+      throw new Error(
+        `"${live.name}" is already live on "${keyword}". Pause it first, or pick another word.`
+      );
+    }
+
+    const tags = Array.isArray(input.tags)
+      ? (input.tags as unknown[]).map((t) => str(t)).filter(Boolean)
+      : [];
+
+    const { data: funnel, error } = await funnels
+      .insert({
+        name,
+        keyword,
+        status: "draft", // never live on creation — activation is the owner's call
+        opening_dm: openingDm,
+        welcome_dm: str(input.welcome_dm) || null,
+        delivery_dm: deliveryDm,
+        delivery_link: deliveryLink || null,
+        public_comment_reply: str(input.public_comment_reply) || null,
+        email_prompt_dm: emailPrompt || null,
+        follow_prompt_dm: followPrompt || null,
+        already_done_dm: str(input.already_done_dm) || null,
+        require_follow: requireFollow,
+        ask_email: askEmail,
+        skip_email_if_known: skipIfKnown,
+        tags,
+        trigger_source: ["comment", "dm", "both"].includes(str(input.trigger_source))
+          ? str(input.trigger_source)
+          : "both",
+        media_id: str(input.media_id) || null,
+        email_template_id: str(input.email_template_id) || null,
+        enroll_workflow_id: str(input.enroll_workflow_id) || null,
+      })
+      .select("id, name, keyword, status")
+      .single();
+    if (error || !funnel) throw new Error(`Failed to create funnel: ${error?.message}`);
+
+    const drafts = (existing || []).length;
+    const gates = [
+      requireFollow ? "must follow" : null,
+      askEmail ? (skipIfKnown ? "email captured (skipped if already known)" : "email captured") : null,
+    ].filter(Boolean);
+
+    return {
+      data: {
+        funnel_id: funnel.id,
+        keyword: funnel.keyword,
+        status: "draft",
+        gates,
+        other_funnels_on_this_word: drafts,
+        next_step: "propose_dm_funnel_activation once the copy has been read",
+      },
+      summary: `Drafted DM funnel "${name}" on "${keyword}"${gates.length ? ` (${gates.join(", ")})` : ""} — draft, not live`,
+    };
+  },
+
+  async list_dm_funnels(input, { supabase }) {
+    let query = dmTable(supabase)
+      .select(
+        "id, name, keyword, status, trigger_source, require_follow, ask_email, skip_email_if_known, delivery_link, tags, stat_triggered, stat_emails_captured, stat_recognised, stat_delivered, created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(50);
+    const status = str(input.status);
+    if (status) query = query.eq("status", status);
+
+    const { data, error } = await query;
+    if (error) {
+      // The table only exists after migration 300 — say so plainly rather than
+      // handing the model a Postgres schema-cache error to interpret.
+      if (/dm_funnels/.test(error.message) && /does not exist|schema cache/i.test(error.message)) {
+        throw new Error("DM funnels aren't installed yet — migration 300_dm_funnels.sql hasn't been run");
+      }
+      throw new Error(error.message);
+    }
+
+    const funnels = data || [];
+    const active = funnels.filter((f: { status: string }) => f.status === "active").length;
+    return {
+      data: { count: funnels.length, active, funnels },
+      summary: `${funnels.length} DM funnel${funnels.length === 1 ? "" : "s"}${status ? ` (${status})` : `, ${active} live`}`,
+    };
+  },
+
+  async propose_dm_funnel_activation(input, { supabase, runId }) {
+    const funnelId = str(input.funnel_id);
+    if (!funnelId) throw new Error("funnel_id is required");
+
+    const { data: funnel, error } = await dmTable(supabase)
+      .select(
+        "id, name, keyword, status, require_follow, ask_email, skip_email_if_known, delivery_link, tags, trigger_source, public_comment_reply, opening_dm, welcome_dm, follow_prompt_dm, email_prompt_dm, delivery_dm"
+      )
+      .eq("id", funnelId)
+      .single();
+    if (error || !funnel) throw new Error("DM funnel not found");
+    if (funnel.status === "active") throw new Error(`"${funnel.name}" is already active`);
+
+    // The approval card renders payload.description behind its Preview toggle.
+    // Activation is the moment strangers start receiving these words, so the
+    // whole sequence goes in front of her — not just the funnel's name.
+    const line = (label: string, text: string | null) =>
+      text ? `**${label}**\n\n> ${text.replace(/\n/g, "\n> ")}\n` : null;
+    const preview = [
+      `Trigger: someone ${funnel.trigger_source === "dm" ? "DMs" : funnel.trigger_source === "comment" ? "comments" : "comments or DMs"} **${funnel.keyword}**`,
+      "",
+      line("Public reply under their comment", funnel.public_comment_reply),
+      line("Opening DM (if they commented)", funnel.opening_dm),
+      // Named for the path it belongs to. The two openers are mutually
+      // exclusive per person, and a preview that implies both would be read is
+      // a preview she can't trust.
+      line("Welcome DM (if they messaged instead)", funnel.welcome_dm),
+      funnel.require_follow ? line("If they don't follow", funnel.follow_prompt_dm) : null,
+      funnel.ask_email ? line("Asking for their email", funnel.email_prompt_dm) : null,
+      line("Delivery", funnel.delivery_dm),
+      funnel.delivery_link ? `Link delivered: ${funnel.delivery_link}` : null,
+      Array.isArray(funnel.tags) && funnel.tags.length ? `Lead tagged: ${funnel.tags.join(", ")}` : null,
+      funnel.ask_email && funnel.skip_email_if_known
+        ? `\n_Anyone already on your list skips all of the above — they get the delivery message straight away, no email asked for._`
+        : funnel.ask_email
+          ? `\n_Everyone is asked for their email, including people already on your list._`
+          : null,
+    ]
+      .filter((v) => v !== null)
+      .join("\n");
+
+    const { data: action, error: insertError } = await supabase
+      .from("agent_actions")
+      .insert({
+        run_id: runId,
+        type: "dm_funnel",
+        title: `Activate DM funnel: ${funnel.name} ("${funnel.keyword}")`,
+        summary: str(input.reason) || null,
+        payload: {
+          funnel_id: funnel.id,
+          funnel_name: funnel.name,
+          keyword: funnel.keyword,
+          require_follow: funnel.require_follow,
+          ask_email: funnel.ask_email,
+          delivery_link: funnel.delivery_link,
+          // Rendered here rather than in the UI so the approval card needs no
+          // special case — it already previews payload.description.
+          description: preview,
+          reason: str(input.reason) || null,
+        } as Json,
+      })
+      .select("id")
+      .single();
+    if (insertError || !action) throw new Error(`Failed to queue activation: ${insertError?.message}`);
+
+    return {
+      data: { action_id: action.id, status: "proposed" },
+      summary: `Proposed activating "${funnel.name}" on "${funnel.keyword}" — waiting for approval`,
+    };
   },
 };
 

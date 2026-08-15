@@ -104,7 +104,7 @@ function ManualConnectModal({
 export default function SocialAccountsPage() {
   const { show, node: toastNode } = useToast();
   const [accounts, setAccounts] = useState<AccountRow[] | null>(null);
-  const [oauth, setOauth] = useState({ meta: false, google: false });
+  const [oauth, setOauth] = useState({ meta: false, google: false, instagram_dm: false });
   const [manual, setManual] = useState<'meta' | 'youtube' | null>(null);
   const [canManage, setCanManage] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -113,7 +113,7 @@ export default function SocialAccountsPage() {
     try {
       const res = await api<{
         accounts: AccountRow[];
-        oauth: { meta: boolean; google: boolean };
+        oauth: { meta: boolean; google: boolean; instagram_dm: boolean };
         can_manage: boolean;
       }>('/api/social/accounts');
       setAccounts(res.accounts);
@@ -178,6 +178,18 @@ export default function SocialAccountsPage() {
             >
               Connect Instagram + Facebook
             </GhostBtn>
+            {/*
+              Second, separate Instagram connection — publishing and messaging
+              run on two different Meta architectures, and one button can't do
+              both. This one grants DMs and comments only.
+            */}
+            {oauth.instagram_dm && (
+              <GhostBtn
+                onClick={() => (window.location.href = '/api/social/oauth/instagram')}
+              >
+                Connect Instagram DMs
+              </GhostBtn>
+            )}
             <GhostBtn
               onClick={() =>
                 oauth.google
@@ -231,6 +243,8 @@ export default function SocialAccountsPage() {
                   </div>
                   <div className="text-[12px] text-zinc-500">
                     {PLATFORM_META[a.platform].label} · connected {timeAgo(a.connected_at)}
+                    {a.platform === 'instagram' &&
+                      (a.dm_connected ? ' · DMs on' : ' · DMs not connected')}
                   </div>
                 </div>
                 <StatusDot status={a.status} map={ACCOUNT_STATUS_DOTS} />

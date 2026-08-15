@@ -11,12 +11,28 @@ import { authenticateSessionOrApiKey, unauthorizedResponse } from "@/lib/api/aut
 import { createAdminClient } from "@/lib/supabase/server";
 import { metaDebugPageToken, metaOAuthConfigured } from "@/lib/social/meta";
 import { googleOAuthConfigured, googleRefreshAccessToken, ytOwnChannel } from "@/lib/social/youtube";
+import { igLoginConfigured } from "@/lib/social/instagram-login";
 
-function redact<T extends { access_token?: string | null; refresh_token?: string | null }>(a: T) {
+/**
+ * This row is selected with `*`, so any token column added by a future
+ * migration reaches the browser unless it is named here. `dm_access_token`
+ * (Instagram Login, migration 302) is the third one. Replaced by a boolean
+ * rather than a bullet string because the UI needs to answer "is this account
+ * connected for DMs?" and a redacted value can't be told from a real one.
+ */
+function redact<
+  T extends {
+    access_token?: string | null;
+    refresh_token?: string | null;
+    dm_access_token?: string | null;
+  },
+>(a: T) {
+  const { dm_access_token, ...rest } = a;
   return {
-    ...a,
+    ...rest,
     access_token: a.access_token ? "•••" : null,
     refresh_token: a.refresh_token ? "•••" : null,
+    dm_connected: Boolean(dm_access_token),
   };
 }
 
@@ -37,7 +53,11 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     accounts: (data || []).map(redact),
-    oauth: { meta: metaOAuthConfigured(), google: googleOAuthConfigured() },
+    oauth: {
+      meta: metaOAuthConfigured(),
+      google: googleOAuthConfigured(),
+      instagram_dm: igLoginConfigured(),
+    },
     can_manage: canManage,
   });
 }

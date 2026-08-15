@@ -33,6 +33,12 @@ interface WorkflowPayload {
   workflow_name: string;
 }
 
+interface DmFunnelPayload {
+  funnel_id: string;
+  funnel_name: string;
+  keyword: string;
+}
+
 export async function executeAgentAction(
   supabase: AdminClient,
   action: AgentAction
@@ -40,6 +46,7 @@ export async function executeAgentAction(
   if (action.type === "email") return executeEmail(supabase, action);
   if (action.type === "publish") return executePublish(supabase, action);
   if (action.type === "workflow") return executeWorkflowActivation(supabase, action);
+  if (action.type === "dm_funnel") return executeDmFunnelActivation(supabase, action);
   // 'other' actions are informational to-dos — approving acknowledges them.
   return { acknowledged: true };
 }
@@ -168,6 +175,56 @@ async function executeWorkflowActivation(
     workflow_id: workflow.id,
     name: workflow.name,
     trigger_type: workflow.trigger_type,
+    activated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Flips a draft DM funnel live. The keyword collision check runs again HERE,
+ * not just at proposal time — a different funnel may have gone live in the gap
+ * between the agent proposing this and the owner approving it, and the unique
+ * index would otherwise reject the update with a raw Postgres error.
+ */
+async function executeDmFunnelActivation(
+  supabase: AdminClient,
+  action: AgentAction
+): Promise<Json> {
+  const payload = action.payload as unknown as DmFunnelPayload;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const table = () => (supabase as any).from("dm_funnels");
+
+  const { data: funnel, error } = await table()
+    .select("id, name, keyword, status, opening_dm, delivery_dm, require_follow, ask_email")
+    .eq("id", payload.funnel_id)
+    .single();
+  if (error || !funnel) throw new Error("DM funnel no longer exists");
+  if (funnel.status === "active") {
+    return { activated: true, already_active: true, funnel_id: funnel.id, name: funnel.name };
+  }
+
+  const { data: clash } = await table()
+    .select("id, name")
+    .eq("status", "active")
+    .ilike("keyword", funnel.keyword)
+    .maybeSingle();
+  if (clash) {
+    throw new Error(
+      `"${clash.name}" is already live on the keyword "${funnel.keyword}" — pause it first`
+    );
+  }
+
+  const { error: updateError } = await table()
+    .update({ status: "active" })
+    .eq("id", funnel.id);
+  if (updateError) throw new Error(`Activation failed: ${updateError.message}`);
+
+  return {
+    activated: true,
+    funnel_id: funnel.id,
+    name: funnel.name,
+    keyword: funnel.keyword,
+    require_follow: funnel.require_follow,
+    ask_email: funnel.ask_email,
     activated_at: new Date().toISOString(),
   };
 }

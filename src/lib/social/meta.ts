@@ -138,6 +138,53 @@ export async function metaListPages(userToken: string): Promise<MetaPage[]> {
   return data.data || [];
 }
 
+// ── Webhook subscription ─────────────────────────────────────────────────────
+
+/**
+ * Subscribe this app to a Page's webhooks. Without this call NOTHING is
+ * delivered to /api/webhooks/meta — the app-level callback URL and field
+ * subscriptions in the Meta dashboard only declare *what* we'd like; this
+ * declares *whose* activity we get. A correct dashboard with no Page
+ * subscription is the failure that looks exactly like a broken webhook.
+ *
+ * Instagram comment/message events for an IG business account are delivered
+ * via its linked Page, which is why this is keyed on the Page id even though
+ * the funnels are Instagram-only.
+ *
+ * Requires `pages_manage_metadata` to touch the edge at all — that permission
+ * lives in the *Pages API* use case, not the Instagram one. Subscribing the
+ * `messages` family additionally requires `pages_messaging`, which exists only
+ * in a Messenger use case this app has not added, so this call currently fails
+ * with code 200. The caller treats that as non-fatal and records it: Instagram
+ * events may still arrive via the app-level Instagram subscription on its own.
+ * See docs/dm-funnels.md §4.
+ *
+ * Note the two objects speak different field vocabularies — `comments` is an
+ * Instagram-object field and the Page object rejects it outright (code 100).
+ */
+export async function metaSubscribePageWebhooks(
+  pageId: string,
+  pageToken: string
+): Promise<void> {
+  await graph<{ success: boolean }>(`/${pageId}/subscribed_apps`, {
+    method: "POST",
+    token: pageToken,
+    params: { subscribed_fields: "messages,messaging_postbacks" },
+  });
+}
+
+/** Fields this app is currently subscribed to on a Page. Empty = not subscribed. */
+export async function metaPageSubscriptions(
+  pageId: string,
+  pageToken: string
+): Promise<string[]> {
+  const data = await graph<{ data?: { subscribed_fields?: string[] }[] }>(
+    `/${pageId}/subscribed_apps`,
+    { token: pageToken }
+  );
+  return data.data?.[0]?.subscribed_fields || [];
+}
+
 // ── Instagram Reels ──────────────────────────────────────────────────────────
 
 /** Step 1: hand IG the hosted video URL; it downloads + transcodes async. */

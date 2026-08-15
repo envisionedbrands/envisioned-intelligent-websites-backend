@@ -61,6 +61,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/crm/calendar',
+    label: 'Calendar',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M208,32H184V24a8,8,0,0,0-16,0v8H88V24a8,8,0,0,0-16,0v8H48A16,16,0,0,0,32,48V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V48A16,16,0,0,0,208,32ZM72,48v8a8,8,0,0,0,16,0V48h80v8a8,8,0,0,0,16,0V48h24V80H48V48ZM208,208H48V96H208V208Z" />
+      </svg>
+    ),
+  },
+  {
     href: '/crm/pipeline',
     label: 'Pipeline',
     icon: (
@@ -84,6 +93,18 @@ const NAV_ITEMS = [
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
         <path d="M224,48H32a8,8,0,0,0-8,8V192a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A8,8,0,0,0,224,48ZM203.43,64,128,133.15,52.57,64ZM216,192H40V74.19l82.59,75.71a8,8,0,0,0,10.82,0L216,74.19V192Z" />
+      </svg>
+    ),
+  },
+  {
+    // Instagram DM funnels. Labelled "DMs" rather than "Automations" because
+    // the sibling item labelled "Email" is also an automation — what tells the
+    // two apart is the channel, not the word.
+    href: '/crm/automations',
+    label: 'DMs',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a87.87,87.87,0,0,1-44.06-11.81,8,8,0,0,0-6.54-.67L40,216,52.47,178.6a8,8,0,0,0-.66-6.54A88,88,0,1,1,128,216Zm12-88a12,12,0,1,1-12-12A12,12,0,0,1,140,128Zm44,0a12,12,0,1,1-12-12A12,12,0,0,1,184,128Zm-88,0a12,12,0,1,1-12-12A12,12,0,0,1,96,128Z" />
       </svg>
     ),
   },
@@ -171,8 +192,11 @@ export function Sidebar() {
     } catch {}
   };
 
-  // Don't show sidebar on login page
-  if (pathname === '/login') return null;
+  // Don't show sidebar on the pages a logged-out visitor can reach — the login
+  // screen, and /data-deletion (public by design, for Meta App Review). Showing
+  // dashboard navigation to a stranger would be both confusing and a leak of
+  // what the back office contains.
+  if (pathname === '/login' || pathname === '/data-deletion') return null;
 
   return (
     <aside

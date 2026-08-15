@@ -27,7 +27,7 @@ type Run = {
 
 type Action = {
   id: string;
-  type: 'email' | 'publish' | 'workflow' | 'other';
+  type: 'email' | 'publish' | 'workflow' | 'dm_funnel' | 'other';
   title: string;
   summary: string | null;
   payload: Record<string, unknown>;
@@ -71,6 +71,7 @@ const TYPE_BADGES: Record<Action['type'], { label: string; cls: string }> = {
   email: { label: 'Email', cls: 'border-blue-500/30 bg-blue-500/10 text-blue-400' },
   publish: { label: 'Publish', cls: 'border-violet-500/30 bg-violet-500/10 text-violet-400' },
   workflow: { label: 'Workflow', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
+  dm_funnel: { label: 'DM funnel', cls: 'border-pink-500/30 bg-pink-500/10 text-pink-400' },
   other: { label: 'To-do', cls: 'border-minimal-border bg-minimal-row text-zinc-400' },
 };
 

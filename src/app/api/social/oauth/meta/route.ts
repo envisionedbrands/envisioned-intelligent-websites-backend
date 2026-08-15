@@ -18,6 +18,7 @@ import {
   metaListPages,
   metaLongLivedToken,
   metaOAuthConfigured,
+  metaSubscribePageWebhooks,
 } from "@/lib/social/meta";
 
 const STATE_COOKIE = "social_oauth_state";
@@ -87,6 +88,23 @@ export async function GET(request: NextRequest) {
       connected++;
       if (page.instagram_business_account) {
         const ig = page.instagram_business_account;
+
+        // Subscribe the linked Page to our webhook. The dashboard's callback URL
+        // and field list only declare what we want; this declares whose activity
+        // we actually receive. Skipping it leaves DM funnels permanently deaf
+        // while every other check looks green — so the outcome is recorded
+        // rather than swallowed.
+        let webhooks: { subscribed: boolean; error?: string };
+        try {
+          await metaSubscribePageWebhooks(page.id, page.access_token);
+          webhooks = { subscribed: true };
+        } catch (e) {
+          webhooks = {
+            subscribed: false,
+            error: e instanceof Error ? e.message : "subscription failed",
+          };
+        }
+
         await supabase.from("social_accounts").upsert(
           {
             platform: "instagram",
@@ -96,7 +114,13 @@ export async function GET(request: NextRequest) {
             access_token: page.access_token,
             status: "active",
             connected_at: new Date().toISOString(),
-            metadata: { page_id: page.id, avatar: ig.profile_picture_url || null } as never,
+            metadata: {
+              page_id: page.id,
+              avatar: ig.profile_picture_url || null,
+              webhooks_subscribed: webhooks.subscribed,
+              webhooks_error: webhooks.error || null,
+              webhooks_checked_at: new Date().toISOString(),
+            } as never,
           },
           { onConflict: "platform,external_id" }
         );

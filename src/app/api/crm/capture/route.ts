@@ -14,6 +14,51 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { authenticateCapture } from "@/lib/crm/capture-auth";
 import { isValidEmail, upsertLead } from "@/lib/crm/leads";
 import { enrollLead, ensureLeadOpportunity } from "@/lib/crm/engine";
+import { logActivity } from "@/lib/crm/activity";
+import type { Database, Json } from "@/types/database";
+
+type AssessmentInsert = Database["public"]["Tables"]["assessment_completions"]["Insert"];
+
+const text = (value: unknown, max: number): string | null =>
+  typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
+
+function assessmentRow(raw: unknown, leadId: string): AssessmentInsert | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const value = raw as Record<string, unknown>;
+  const assessmentKey = text(value.assessment_key, 80);
+  const version = text(value.version, 80);
+  const sessionId = text(value.session_id, 100);
+  const rawScore = Number(value.raw_score);
+  const normalizedScore = Number(value.normalized_score);
+  const stage = text(value.maturity_stage, 40);
+
+  if (!assessmentKey || !version || !sessionId || !stage || !Number.isInteger(rawScore) || !Number.isInteger(normalizedScore) || normalizedScore < 0 || normalizedScore > 100) {
+    throw new Error("Invalid assessment completion");
+  }
+
+  const jsonObject = (item: unknown): Json =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? JSON.parse(JSON.stringify(item)) as Json
+      : {};
+
+  return {
+    lead_id: leadId,
+    assessment_key: assessmentKey,
+    version,
+    session_id: sessionId,
+    raw_score: rawScore,
+    normalized_score: normalizedScore,
+    maturity_stage: stage,
+    dimension_scores: jsonObject(value.dimension_scores),
+    answers: jsonObject(value.answers),
+    commercial_fit: text(value.commercial_fit, 40),
+    qualification: jsonObject(value.qualification),
+    marketing_consent: value.marketing_consent === true,
+    page_url: text(value.page_url, 500),
+    referrer: text(value.referrer, 500),
+    completed_at: text(value.completed_at, 40) || new Date().toISOString(),
+  };
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -67,6 +112,27 @@ export async function POST(request: NextRequest) {
     };
 
     const { lead, created } = await upsertLead(supabase, input, { actor: `capture:${auth.via}` });
+
+    const completion = assessmentRow(body.assessment, lead.id);
+    if (completion) {
+      const { error: assessmentError } = await supabase
+        .from("assessment_completions")
+        .upsert(completion, { onConflict: "assessment_key,session_id" });
+      if (assessmentError) throw new Error(`assessment completion failed: ${assessmentError.message}`);
+
+      await logActivity(supabase, {
+        lead_id: lead.id,
+        activity_type: "assessment_completed",
+        title: `Assessment completed: ${completion.assessment_key}`,
+        data: {
+          score: completion.normalized_score,
+          stage: completion.maturity_stage,
+          commercial_fit: completion.commercial_fit,
+          version: completion.version,
+        },
+        actor: `capture:${auth.via}`,
+      });
+    }
 
     // Auto-file into the sales pipeline: a fresh inbound lead opens a deal in
     // "New". Idempotent and forward-only. If upsertLead already enrolled them

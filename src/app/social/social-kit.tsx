@@ -23,6 +23,13 @@ export interface AccountRow {
   token_expires_at: string | null;
   connected_at: string;
   metadata: Record<string, unknown>;
+  /**
+   * Instagram only: whether this account also holds an Instagram Login token
+   * for DMs. Publishing and messaging are separate grants on separate Meta
+   * architectures, so an account can look fully connected and still be unable
+   * to send or receive a single message.
+   */
+  dm_connected?: boolean;
 }
 
 export interface MetricsRow {

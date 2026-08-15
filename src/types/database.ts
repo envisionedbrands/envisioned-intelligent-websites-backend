@@ -1081,7 +1081,7 @@ export type Database = {
         Row: {
           id: string;
           run_id: string | null;
-          type: "email" | "publish" | "workflow" | "other";
+          type: "email" | "publish" | "workflow" | "dm_funnel" | "other";
           title: string;
           summary: string | null;
           payload: Json;
@@ -1094,7 +1094,7 @@ export type Database = {
         Insert: {
           id?: string;
           run_id?: string | null;
-          type: "email" | "publish" | "workflow" | "other";
+          type: "email" | "publish" | "workflow" | "dm_funnel" | "other";
           title: string;
           summary?: string | null;
           payload?: Json;
@@ -1107,7 +1107,7 @@ export type Database = {
         Update: {
           id?: string;
           run_id?: string | null;
-          type?: "email" | "publish" | "workflow" | "other";
+          type?: "email" | "publish" | "workflow" | "dm_funnel" | "other";
           title?: string;
           summary?: string | null;
           payload?: Json;
