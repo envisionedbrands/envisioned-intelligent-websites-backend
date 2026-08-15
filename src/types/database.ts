@@ -2025,6 +2025,46 @@ export type Database = {
         };
         Relationships: [];
       };
+      calendar_feeds: {
+        Row: {
+          id: string;
+          name: string;
+          ics_url: string;
+          is_active: boolean;
+          busy_only: boolean;
+          last_synced_at: string | null;
+          last_status: string | null;
+          last_error: string | null;
+          last_event_count: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          ics_url: string;
+          is_active?: boolean;
+          busy_only?: boolean;
+          last_synced_at?: string | null;
+          last_status?: string | null;
+          last_error?: string | null;
+          last_event_count?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          ics_url?: string;
+          is_active?: boolean;
+          busy_only?: boolean;
+          last_synced_at?: string | null;
+          last_status?: string | null;
+          last_error?: string | null;
+          last_event_count?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       booking_blackouts: {
         Row: {
           id: string;
@@ -2033,6 +2073,9 @@ export type Database = {
           ends_at: string;
           reason: string | null;
           created_at: string;
+          source: string;
+          feed_id: string | null;
+          external_uid: string | null;
         };
         Insert: {
           id?: string;
@@ -2041,12 +2084,18 @@ export type Database = {
           ends_at: string;
           reason?: string | null;
           created_at?: string;
+          source?: string;
+          feed_id?: string | null;
+          external_uid?: string | null;
         };
         Update: {
           event_type_id?: string | null;
           starts_at?: string;
           ends_at?: string;
           reason?: string | null;
+          source?: string;
+          feed_id?: string | null;
+          external_uid?: string | null;
         };
         Relationships: [];
       };

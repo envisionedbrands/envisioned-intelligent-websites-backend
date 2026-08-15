@@ -6,6 +6,7 @@ import { recomputeLeadScores } from "./scoring";
 import { alertHotLeads } from "./alerts";
 import { promoteSubjectTests } from "./abtest";
 import { sendBookingReminders } from "./bookings";
+import { syncCalendarFeeds } from "./calendar-sync";
 import { runHealthChecks } from "./health";
 import type {
   AdminClient,
@@ -876,8 +877,19 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
     // subject_b column not there yet — testing simply isn't enabled
   }
 
-  // Booking reminders (Cal.com): time-critical, so they bypass the send
-  // window — and like scoring, a hiccup must never fail the tick.
+  // External calendars first: pulling her busy times in before anything else
+  // means the booking pages stop offering a slot she's just committed to as
+  // soon as the feed knows about it. A feed hiccup must never fail the tick.
+  try {
+    const feeds = await syncCalendarFeeds(supabase);
+    const failed = feeds.filter((f) => f.status === "error");
+    summary.errors.push(...failed.map((f) => `calendar feed "${f.feed}": ${f.error}`));
+  } catch (e) {
+    summary.errors.push(`calendar sync: ${e instanceof Error ? e.message : "unknown error"}`);
+  }
+
+  // Booking reminders: time-critical, so they bypass the send window — and
+  // like scoring, a hiccup must never fail the tick.
   try {
     const reminders = await sendBookingReminders(supabase, settings);
     summary.booking_reminders_sent = reminders.sent + reminders.simulated;

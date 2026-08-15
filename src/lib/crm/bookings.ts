@@ -1,7 +1,7 @@
 /**
  * Cal.com booking sync + reminder emails.
  *
- * Bookings flow in through /api/crm/webhooks/calcom and land in the
+ * Bookings are created natively at /api/book/:slug (frontend) and land in the
  * `appointments` table (keyed by cal_uid), attached to a lead that is
  * upserted through the normal capture path — so tag triggers, pipeline
  * auto-population and the timeline all behave exactly like any other
@@ -319,7 +319,10 @@ export async function sendBookingReminders(
     .from("appointments")
     .select("*")
     .eq("status", "scheduled")
-    .not("cal_uid", "is", null)
+    // Any booking with a lead gets reminders — native bookings have no
+    // cal_uid, and filtering on it silently excluded every real booking
+    // once we moved off Cal.com (caught 2026-08-15).
+    .not("lead_id", "is", null)
     .gt("starts_at", new Date(now).toISOString())
     .lte("starts_at", new Date(now + 24 * HOUR).toISOString())
     .or("reminder_24h_sent_at.is.null,reminder_1h_sent_at.is.null");
