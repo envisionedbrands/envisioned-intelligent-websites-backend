@@ -68,7 +68,14 @@ async function syncOne(
       (e) => !(feed.busy_only && e.transparent)
     );
 
-    const rows = events.map((e) => ({
+    // A modified instance (RECURRENCE-ID) can land on the same uid::start as
+    // the series expansion of that instant, so the same external_uid appears
+    // twice in one batch. Last write wins — the override is the truer row.
+    const deduped = Array.from(
+      new Map(events.map((e) => [e.uid.slice(0, 500), e])).values()
+    );
+
+    const rows = deduped.map((e) => ({
       feed_id: feed.id,
       external_uid: e.uid.slice(0, 500),
       source: "feed",
