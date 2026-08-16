@@ -223,13 +223,17 @@ export default function TemplatesPage() {
 
             {/* preview */}
             <div className="overflow-hidden">
-              <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-600">
-                Preview — what they receive
+              <p className="mb-2 flex items-baseline justify-between text-[10px] uppercase tracking-wider text-zinc-600">
+                <span>Preview — what they receive</span>
+                <span className="normal-case tracking-normal text-zinc-700">links open in a new tab</span>
               </p>
               <iframe
                 title="Email preview"
                 srcDoc={preview}
-                sandbox=""
+                // Links must be clickable — a dead button reads as a broken
+                // email (MI clicked one and thought the Zoom link was down).
+                // Popups only; scripts and same-origin access stay blocked.
+                sandbox="allow-popups allow-popups-to-escape-sandbox"
                 className="h-[calc(100%-24px)] w-full border border-white/10 bg-white"
               />
             </div>

@@ -35,12 +35,15 @@ function fill(text: string): string {
 
 async function render(bodyMd: string, preheader: string | null, supabase: ReturnType<typeof createAdminClient>) {
   const settings = await getCrmSettings(supabase);
-  return renderEmailHtml({
+  const html = renderEmailHtml({
     bodyMd: fill(bodyMd),
     preheader: preheader ? fill(preheader) : null,
     sender: settings.sender,
     unsubscribeUrl: "#",
   });
+  // Preview only: open links in a new tab so a click never navigates the
+  // embedded frame (and so a real click proves the href is right).
+  return html.replace(/<a /g, '<a target="_blank" rel="noopener noreferrer" ');
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
