@@ -35,9 +35,9 @@ type Step = {
   /** Utility steps carry the join link and never stand down. */
   yields: boolean;
   /** True when this step is due for an appointment starting in `msUntil`. */
-  due: (msUntil: number) => boolean;
+  due: (msUntil: number, appt: Appointment) => boolean;
   /** Past its useful window — stamp as covered without sending. */
-  missed: (msUntil: number) => boolean;
+  missed: (msUntil: number, appt: Appointment) => boolean;
 };
 
 const STEPS: Step[] = [
@@ -46,8 +46,11 @@ const STEPS: Step[] = [
     column: "confirmation_sent_at",
     template: "Booking — confirmation",
     yields: true,
-    due: () => true, // as soon as the booking exists
-    missed: (ms) => ms < 0,
+    // Only just after the booking was made. Without the created_at guard this
+    // fires for ANY future booking the moment the sequence is switched on —
+    // which sent a "you are penciled in" three days after the fact (2026-08-16).
+    due: (ms, appt) => ms > 0 && ageMs(appt) <= 6 * HOUR,
+    missed: (ms, appt) => ms < 0 || ageMs(appt) > 6 * HOUR,
   },
   {
     key: "reminder_24h",
@@ -110,6 +113,12 @@ const FALLBACK: Record<string, { subject: string; body: string }> = {
     body: "Thank you for today. I am writing up what we covered and will send it shortly.\n\nMaria-Ines",
   },
 };
+
+/** How long ago the booking was made. */
+function ageMs(appt: Appointment): number {
+  const created = appt.created_at ? new Date(appt.created_at).getTime() : 0;
+  return created ? Date.now() - created : 0;
+}
 
 export type SequenceSummary = { sent: number; simulated: number; skipped: number; errors: string[] };
 
@@ -202,7 +211,7 @@ export async function runBookingSequence(
       if (appt[step.column]) continue; // already handled
 
       // Window gone: stamp as covered so it never fires late.
-      if (step.missed(msUntil)) {
+      if (step.missed(msUntil, appt)) {
         await supabase
           .from("appointments")
           .update({ [step.column]: new Date().toISOString() })
@@ -210,7 +219,7 @@ export async function runBookingSequence(
         summary.skipped++;
         continue;
       }
-      if (!step.due(msUntil)) continue;
+      if (!step.due(msUntil, appt)) continue;
 
       // The collision guard — nurture steps stand down, utility steps don't.
       if (step.yields) {
@@ -228,6 +237,17 @@ export async function runBookingSequence(
           continue;
         }
       }
+
+      // Claim the step atomically. The cron tick and a manual tick can overlap;
+      // on 2026-08-16 that put a confirmation and a 1h reminder in the same
+      // inbox one second apart. Whoever wins the conditional update sends.
+      const { data: claimed } = await supabase
+        .from("appointments")
+        .update({ [step.column]: new Date().toISOString() })
+        .eq("id", appt.id)
+        .is(step.column, null)
+        .select("id");
+      if (!claimed?.length) continue; // another tick got there first
 
       const tpl = tplByName.get(step.template);
       const fb = FALLBACK[step.template];
@@ -249,16 +269,21 @@ export async function runBookingSequence(
           settings
         );
         if (result.status === "failed") {
+          // Release the claim so the next tick retries.
+          await supabase
+            .from("appointments")
+            .update({ [step.column]: null })
+            .eq("id", appt.id);
           summary.errors.push(`${lead.email} (${step.key}): ${result.error}`);
-          continue; // unstamped → retried next tick
+          continue;
         }
         if (result.status === "sent") summary.sent++;
         if (result.status === "simulated") summary.simulated++;
+      } catch (e) {
         await supabase
           .from("appointments")
-          .update({ [step.column]: new Date().toISOString() })
+          .update({ [step.column]: null })
           .eq("id", appt.id);
-      } catch (e) {
         summary.errors.push(
           `${lead.email} (${step.key}): ${e instanceof Error ? e.message : "send error"}`
         );
