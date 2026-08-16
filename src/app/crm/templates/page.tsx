@@ -11,7 +11,7 @@
  * The preview is the real shell rendered server-side — what the recipient
  * gets, not an approximation.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, EmptyState, GhostBtn, Loading, PageHeader, PrimaryBtn, useToast } from '@/components/crm/kit';
 
 type Template = {
@@ -80,6 +80,79 @@ export default function TemplatesPage() {
       clearTimeout(timer);
     };
   }, [draft]);
+
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Formatting is applied to the markdown source rather than to rendered HTML.
+   * A WYSIWYG that edits the preview has to convert HTML back to source, and
+   * that roundtrip is exactly where merge tags get mangled — a stray span
+   * inside {{first_name}} ships a visible tag to a client.
+   */
+  function apply(kind: string) {
+    const el = bodyRef.current;
+    if (!el || !draft) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const text = draft.body_md;
+    const sel = text.slice(start, end);
+
+    let insert = '';
+    let caret = 0; // where to put the cursor, relative to insert start
+
+    switch (kind) {
+      case 'bold':
+        insert = `**${sel || 'bold text'}**`;
+        caret = sel ? insert.length : 2;
+        break;
+      case 'italic':
+        insert = `*${sel || 'italic text'}*`;
+        caret = sel ? insert.length : 1;
+        break;
+      case 'h2':
+        insert = `\n## ${sel || 'Heading'}\n`;
+        caret = insert.length;
+        break;
+      case 'quote':
+        insert = `\n> ${sel || 'Something worth pulling out'}\n`;
+        caret = insert.length;
+        break;
+      case 'label':
+        insert = `\n::${sel || 'This week'}::\n`;
+        caret = insert.length;
+        break;
+      case 'link':
+        insert = `[${sel || 'link text'}](https://)`;
+        caret = insert.length - 1;
+        break;
+      case 'button':
+        insert = `\n\n[${sel || 'Book a time'}](https://home.envisioned.me/book/client-session)\n\n`;
+        caret = insert.length;
+        break;
+      case 'divider':
+        insert = `\n\n---\n\n`;
+        caret = insert.length;
+        break;
+      case 'bullets':
+        insert = sel
+          ? sel.split('\n').map((l) => (l.trim() ? `- ${l.replace(/^[-*]\s*/, '')}` : l)).join('\n')
+          : '\n- First\n- Second\n';
+        caret = insert.length;
+        break;
+      default:
+        // merge tag
+        insert = kind;
+        caret = insert.length;
+    }
+
+    const next = text.slice(0, start) + insert + text.slice(end);
+    setDraft({ ...draft, body_md: next });
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = start + caret;
+      el.setSelectionRange(pos, pos);
+    });
+  }
 
   const grouped = useMemo(() => {
     const m = new Map<string, Template[]>();
@@ -202,7 +275,46 @@ export default function TemplatesPage() {
                     <label className="mb-1 block text-[10px] uppercase tracking-wider text-zinc-600">
                       Body
                     </label>
+                    <div className="mb-1.5 flex flex-wrap items-center gap-1">
+                      {([
+                        ['bold', 'B', 'Bold'],
+                        ['italic', 'I', 'Italic'],
+                        ['h2', 'H', 'Heading'],
+                        ['quote', '\u201C', 'Pull quote'],
+                        ['bullets', '\u2022', 'Bullet list'],
+                        ['link', 'Link', 'Link'],
+                        ['button', 'Button', 'Button (link on its own line)'],
+                        ['label', 'Label', 'Boxed label'],
+                        ['divider', '\u2014', 'Divider'],
+                      ] as const).map(([kind, glyph, title]) => (
+                        <button
+                          key={kind}
+                          type="button"
+                          title={title}
+                          onClick={() => apply(kind)}
+                          className="border border-white/10 px-2 py-1 text-[11px] text-zinc-400 transition-colors hover:border-white/30 hover:text-white"
+                        >
+                          {glyph}
+                        </button>
+                      ))}
+                      <select
+                        value=""
+                        onChange={(e) => { if (e.target.value) apply(e.target.value); e.target.value = ''; }}
+                        title="Insert a merge tag"
+                        className="border border-white/10 bg-transparent px-2 py-1 text-[11px] text-zinc-400 focus:outline-none"
+                      >
+                        <option value="">Insert…</option>
+                        <option value="{{first_name|there}}">First name</option>
+                        <option value="{{booking_day}}">Booking day</option>
+                        <option value="{{booking_weekday}}">Weekday</option>
+                        <option value="{{booking_time}}">Booking time</option>
+                        <option value="{{booking_title}}">Booking title</option>
+                        <option value="{{meeting_url}}">Meeting link</option>
+                        <option value="{{guest_notes}}">Their notes</option>
+                      </select>
+                    </div>
                     <textarea
+                      ref={bodyRef}
                       value={draft.body_md}
                       onChange={(e) => setDraft({ ...draft, body_md: e.target.value })}
                       rows={22}
@@ -225,15 +337,26 @@ export default function TemplatesPage() {
             <div className="overflow-hidden">
               <p className="mb-2 flex items-baseline justify-between text-[10px] uppercase tracking-wider text-zinc-600">
                 <span>Preview — what they receive</span>
-                <span className="normal-case tracking-normal text-zinc-700">links open in a new tab</span>
+                {draft && (
+                  <a
+                    href={`/api/crm/templates/${draft.id}/preview`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="normal-case tracking-normal text-zinc-500 underline hover:text-white"
+                    title="Opens the saved version, with working links"
+                  >
+                    open in new tab ↗
+                  </a>
+                )}
               </p>
               <iframe
                 title="Email preview"
                 srcDoc={preview}
-                // Links must be clickable — a dead button reads as a broken
-                // email (MI clicked one and thought the Zoom link was down).
-                // Popups only; scripts and same-origin access stay blocked.
-                sandbox="allow-popups allow-popups-to-escape-sandbox"
+                // Fully sandboxed: this renders reliably, but swallows clicks.
+                // "Open in new tab" beside the heading is the clickable copy —
+                // MI clicked a dead button here and thought the Zoom link was
+                // broken, so the escape hatch has to be visible.
+                sandbox=""
                 className="h-[calc(100%-24px)] w-full border border-white/10 bg-white"
               />
             </div>
