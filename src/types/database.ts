@@ -1734,6 +1734,10 @@ export type Database = {
           raw: Json | null;
           reminder_24h_sent_at: string | null;
           reminder_1h_sent_at: string | null;
+          confirmation_sent_at: string | null;
+          reminder_12h_sent_at: string | null;
+          reminder_5min_sent_at: string | null;
+          thank_you_sent_at: string | null;
           event_type_id: string | null;
           booking_token: string | null;
           guest_timezone: string | null;
@@ -1760,6 +1764,10 @@ export type Database = {
           raw?: Json | null;
           reminder_24h_sent_at?: string | null;
           reminder_1h_sent_at?: string | null;
+          confirmation_sent_at?: string | null;
+          reminder_12h_sent_at?: string | null;
+          reminder_5min_sent_at?: string | null;
+          thank_you_sent_at?: string | null;
           event_type_id?: string | null;
           booking_token?: string | null;
           guest_timezone?: string | null;
@@ -1786,6 +1794,10 @@ export type Database = {
           raw?: Json | null;
           reminder_24h_sent_at?: string | null;
           reminder_1h_sent_at?: string | null;
+          confirmation_sent_at?: string | null;
+          reminder_12h_sent_at?: string | null;
+          reminder_5min_sent_at?: string | null;
+          thank_you_sent_at?: string | null;
           event_type_id?: string | null;
           booking_token?: string | null;
           guest_timezone?: string | null;

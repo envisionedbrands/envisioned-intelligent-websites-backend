@@ -7,6 +7,7 @@ import { alertHotLeads } from "./alerts";
 import { promoteSubjectTests } from "./abtest";
 import { sendBookingReminders } from "./bookings";
 import { syncCalendarFeeds } from "./calendar-sync";
+import { runBookingSequence } from "./booking-sequence";
 import { runHealthChecks } from "./health";
 import type {
   AdminClient,
@@ -47,6 +48,7 @@ export interface TickSummary {
   hot_leads_alerted: number;
   ab_tests_promoted: number;
   booking_reminders_sent: number;
+  booking_sequence_sent: number;
 }
 
 // ── Triggers ─────────────────────────────────────────────────────────────────
@@ -744,6 +746,7 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
     hot_leads_alerted: 0,
     ab_tests_promoted: 0,
     booking_reminders_sent: 0,
+    booking_sequence_sent: 0,
   };
 
   const settings = await getCrmSettings(supabase);
@@ -886,6 +889,17 @@ export async function runEngineTick(supabase: AdminClient, limit = 100): Promise
     summary.errors.push(...failed.map((f) => `calendar feed "${f.feed}": ${f.error}`));
   } catch (e) {
     summary.errors.push(`calendar sync: ${e instanceof Error ? e.message : "unknown error"}`);
+  }
+
+  // Booking follow-up sequence (confirmation → reminders → thank-you).
+  // Ships disabled; runBookingSequence returns immediately until she flips
+  // booking_sequence_enabled after approving the copy.
+  try {
+    const seq = await runBookingSequence(supabase, settings);
+    summary.booking_sequence_sent = seq.sent + seq.simulated;
+    summary.errors.push(...seq.errors.map((e) => `booking sequence: ${e}`));
+  } catch (e) {
+    summary.errors.push(`booking sequence: ${e instanceof Error ? e.message : "unknown error"}`);
   }
 
   // Booking reminders: time-critical, so they bypass the send window — and
