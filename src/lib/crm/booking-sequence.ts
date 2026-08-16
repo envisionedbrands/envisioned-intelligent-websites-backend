@@ -124,6 +124,11 @@ function fmt(appt: Appointment, lead: Lead) {
       day: "numeric",
       month: "long",
     }),
+    // Just the day name, for sign-offs — "See you Wednesday."
+    booking_weekday: start.toLocaleDateString("en-GB", {
+      timeZone: tz,
+      weekday: "long",
+    }),
     booking_time: start.toLocaleTimeString("en-GB", {
       timeZone: tz,
       hour: "2-digit",
