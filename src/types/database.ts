@@ -1482,6 +1482,8 @@ export type Database = {
           won_at: string | null;
           lost_at: string | null;
           lost_reason: string | null;
+          offer_slug: string | null;
+          source: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1498,6 +1500,8 @@ export type Database = {
           won_at?: string | null;
           lost_at?: string | null;
           lost_reason?: string | null;
+          offer_slug?: string | null;
+          source?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1514,6 +1518,8 @@ export type Database = {
           won_at?: string | null;
           lost_at?: string | null;
           lost_reason?: string | null;
+          offer_slug?: string | null;
+          source?: string | null;
           created_at?: string;
           updated_at?: string;
         };
