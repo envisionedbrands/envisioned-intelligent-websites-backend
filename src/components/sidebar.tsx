@@ -88,6 +88,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/crm/templates',
+    label: 'Templates',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40Zm0,16V88H40V56Zm0,144H40V104H216v96Zm-24-64a8,8,0,0,1-8,8H72a8,8,0,0,1,0-16H184A8,8,0,0,1,192,136Zm-40,32a8,8,0,0,1-8,8H72a8,8,0,0,1,0-16h72A8,8,0,0,1,152,168Z" />
+      </svg>
+    ),
+  },
+  {
     href: '/crm/workflows',
     label: 'Email',
     icon: (
