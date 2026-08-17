@@ -2043,6 +2043,56 @@ export type Database = {
         };
         Relationships: [];
       };
+      content_derivatives: {
+        Row: {
+          id: string;
+          source_content_id: string;
+          kind: string;
+          title: string | null;
+          body: string;
+          hook: string | null;
+          cta: string | null;
+          status: string;
+          scheduled_for: string | null;
+          published_at: string | null;
+          external_url: string | null;
+          run_id: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_content_id: string;
+          kind: string;
+          title?: string | null;
+          body: string;
+          hook?: string | null;
+          cta?: string | null;
+          status?: string;
+          scheduled_for?: string | null;
+          published_at?: string | null;
+          external_url?: string | null;
+          run_id?: string | null;
+          notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          kind?: string;
+          title?: string | null;
+          body?: string;
+          hook?: string | null;
+          cta?: string | null;
+          status?: string;
+          scheduled_for?: string | null;
+          published_at?: string | null;
+          external_url?: string | null;
+          notes?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       calendar_feeds: {
         Row: {
           id: string;

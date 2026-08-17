@@ -88,6 +88,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/crm/repurpose',
+    label: 'Repurpose',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M240,128a8,8,0,0,1-8,8H211.4l-24,32H232a8,8,0,0,1,0,16H175.4l-9.6,12.8a8,8,0,0,1-6.4,3.2H96a8,8,0,0,1-6.4-3.2L80,184H24a8,8,0,0,1,0-16H68.6l-24-32H24a8,8,0,0,1,0-16H44.6l24-32H24a8,8,0,0,1,0-16H80l9.6-12.8A8,8,0,0,1,96,56h63.4a8,8,0,0,1,6.4,3.2L175.4,72H232a8,8,0,0,1,0,16H187.4l24,32H232A8,8,0,0,1,240,128Z" />
+      </svg>
+    ),
+  },
+  {
     href: '/crm/templates',
     label: 'Templates',
     icon: (
