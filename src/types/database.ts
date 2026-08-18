@@ -115,6 +115,7 @@ export type Database = {
           featured_image_url: string | null;
           featured_video_url: string | null;
           view_count: number;
+           word_count: number | null;
           unique_visitors: number;
           avg_time_on_page: number;
           conversion_count: number;
@@ -141,6 +142,7 @@ export type Database = {
           featured_image_url?: string | null;
           featured_video_url?: string | null;
           view_count?: number;
+           word_count?: number | null;
           unique_visitors?: number;
           avg_time_on_page?: number;
           conversion_count?: number;
@@ -167,6 +169,7 @@ export type Database = {
           featured_image_url?: string | null;
           featured_video_url?: string | null;
           view_count?: number;
+           word_count?: number | null;
           unique_visitors?: number;
           avg_time_on_page?: number;
           conversion_count?: number;

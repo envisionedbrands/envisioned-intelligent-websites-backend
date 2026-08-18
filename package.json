@@ -2,7 +2,7 @@
   "name": "digital-home-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "The Digital Home Platform \u2014 an open-source operating system for your digital presence. Content pipeline, lead management, email sequences, analytics, and agent oversight.",
+  "description": "The Digital Home Platform — an open-source operating system for your digital presence. Content pipeline, lead management, email sequences, analytics, and agent oversight.",
   "engines": {
     "node": ">=22"
   },
@@ -34,6 +34,7 @@
     "@tiptap/starter-kit": "^3.29.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.13",
     "lucide-react": "^1.7.0",
     "marked": "^16.4.2",
     "next": "^16.2.4",

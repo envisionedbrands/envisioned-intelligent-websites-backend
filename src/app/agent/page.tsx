@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { api, EmptyState, GhostBtn, PrimaryBtn, timeAgo, useToast } from '@/components/crm/kit';
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -76,10 +77,19 @@ const TYPE_BADGES: Record<Action['type'], { label: string; cls: string }> = {
 };
 
 function Markdown({ md }: { md: string }) {
+  // Sanitise before it reaches the DOM. This renders agent output, which quotes
+  // material the agent read — lead names, DM text, form submissions — so the
+  // string is attacker-influenced. marked passes raw HTML straight through, so
+  // without this a lead called `<img src=x onerror=...>` executed script inside
+  // the logged-in Studio session. Audit finding, 2026-08-18.
+  const html = DOMPurify.sanitize(marked.parse(md) as string, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ['target', 'rel'],
+  });
   return (
     <div
       className="agent-md text-[13.5px] leading-relaxed text-zinc-300"
-      dangerouslySetInnerHTML={{ __html: marked.parse(md) as string }}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }
