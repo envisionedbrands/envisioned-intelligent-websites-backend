@@ -12,9 +12,14 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
-  // Allow login page and static assets
+  // Allow login page, static assets, and the one deliberately public page.
+  //
+  // `/data-deletion` is required by Meta App Review and is opened by a reviewer
+  // who is not logged in, so it cannot sit behind this gate. It reads no
+  // database and takes no input — it is static copy. Any future public page
+  // must be added here AND to the sidebar suppression in components/sidebar.tsx.
   const { pathname } = request.nextUrl;
-  if (pathname === '/login' || pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api')) {
+  if (pathname === '/login' || pathname === '/data-deletion' || pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api')) {
     return NextResponse.next();
   }
 

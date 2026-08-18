@@ -33,12 +33,17 @@ import {
   getDmUserProfile,
   isWindowOpen,
   matchesKeyword,
+  primaryKeyword,
   MetaSendError,
   renderDmCopy,
   replyToComment,
   sendDm,
+  sendDmCard,
   sendPrivateReply,
   windowExpiresAt,
+  describeCard,
+  type DmCard,
+  type QuickReply,
 } from "./messaging";
 
 /**
@@ -74,6 +79,16 @@ export interface DmFunnel {
   ask_email: boolean;
   skip_email_if_known: boolean;
   delivery_link: string | null;
+  /**
+   * Deliver as a link card rather than a text message. Null title = the old
+   * text behaviour, which is what every funnel written before this existed
+   * still does. Setting a title is the whole switch.
+   */
+  delivery_card_title: string | null;
+  delivery_card_subtitle: string | null;
+  delivery_card_image: string | null;
+  /** Wording on the button. Falls back to "Read it" rather than being blank. */
+  delivery_button_label: string | null;
   tags: string[];
   email_template_id: string | null;
   enroll_workflow_id: string | null;
@@ -170,16 +185,33 @@ async function send(
   account: Account,
   subscriber: DmSubscriber,
   text: string,
-  opts: { runId?: string; method?: SendMethod; commentId?: string; safeMode: boolean }
+  opts: {
+    runId?: string;
+    method?: SendMethod;
+    commentId?: string;
+    safeMode: boolean;
+    /**
+     * Send as a link card instead of text. Only the ordinary DM path can carry
+     * one — a private reply and a public comment reply are both text-only — so
+     * a card requested on those paths silently falls back to `text`, which is
+     * why every caller must still pass sensible text.
+     */
+    card?: DmCard;
+    quickReplies?: QuickReply[];
+  }
 ): Promise<boolean> {
   const method = opts.method ?? "send_api";
+  const asCard = opts.card && method === "send_api" ? opts.card : null;
+  // What lands in the transcript. For a card that is the headline, subtitle and
+  // button targets, so the activity feed still answers "what were they told".
+  const transcript = asCard ? describeCard(asCard) : text;
 
   if (opts.safeMode) {
     await recordMessage(supabase, {
       subscriber_id: subscriber.id,
       run_id: opts.runId ?? null,
       direction: "outbound",
-      body: text,
+      body: transcript,
       method,
       simulated: true,
     });
@@ -193,14 +225,22 @@ async function send(
     } else if (method === "comment_reply" && opts.commentId) {
       const res = await replyToComment(opts.commentId, account.access_token, text);
       messageId = res.id;
+    } else if (asCard) {
+      ({ messageId } = await sendDmCard(account.external_id, account.access_token, subscriber.igsid, [asCard]));
     } else {
-      ({ messageId } = await sendDm(account.external_id, account.access_token, subscriber.igsid, text));
+      ({ messageId } = await sendDm(
+        account.external_id,
+        account.access_token,
+        subscriber.igsid,
+        text,
+        opts.quickReplies
+      ));
     }
     await recordMessage(supabase, {
       subscriber_id: subscriber.id,
       run_id: opts.runId ?? null,
       direction: "outbound",
-      body: text,
+      body: transcript,
       external_id: messageId ?? null,
       method,
     });
@@ -211,7 +251,7 @@ async function send(
       subscriber_id: subscriber.id,
       run_id: opts.runId ?? null,
       direction: "outbound",
-      body: text,
+      body: transcript,
       method,
       error: e.message,
     });
@@ -432,8 +472,8 @@ async function deliver(
       {
         email,
         name: subscriber.name || subscriber.username || null,
-        source: `instagram-dm:${funnel.keyword.toLowerCase()}`,
-        form: `dm-funnel:${funnel.keyword.toLowerCase()}`,
+        source: `instagram-dm:${primaryKeyword(funnel.keyword)}`,
+        form: `dm-funnel:${primaryKeyword(funnel.keyword)}`,
         tags: funnel.tags,
         custom: {
           // Lowercased because this is what recogniseLead() matches on next
@@ -456,10 +496,10 @@ async function deliver(
       activity_type: "note",
       title: `Instagram DM funnel: ${funnel.name}`,
       body: recognised
-        ? `Asked for "${funnel.keyword}"${
+        ? `Asked for "${primaryKeyword(funnel.keyword)}"${
             subscriber.username ? ` from @${subscriber.username}` : ""
           } — already on file, so we didn't ask for their email again.`
-        : `Captured via keyword "${funnel.keyword}"${
+        : `Captured via keyword "${primaryKeyword(funnel.keyword)}"${
             subscriber.username ? ` from @${subscriber.username}` : ""
           }.`,
       data: {
@@ -496,22 +536,52 @@ async function deliver(
         .select("*")
         .eq("id", funnel.enroll_workflow_id)
         .maybeSingle();
-      if (wf) await enrollLead(supabase, wf, lead, `dm-funnel:${funnel.keyword}`);
+      if (wf) await enrollLead(supabase, wf, lead, `dm-funnel:${primaryKeyword(funnel.keyword)}`);
     }
   }
 
-  const copy = renderDmCopy(funnel.delivery_dm, {
+  const vars = {
     first_name: subscriber.name?.split(/\s+/)[0] || null,
     username: subscriber.username,
-    keyword: funnel.keyword,
+    keyword: primaryKeyword(funnel.keyword),
     link: funnel.delivery_link,
     email,
-  });
+  };
+  const copy = renderDmCopy(funnel.delivery_dm, vars);
+
+  /**
+   * The card is only built when there is both a title and somewhere for the
+   * button to go. A card with no destination is a picture of a link, which is
+   * worse than the text it replaced.
+   *
+   * `text` is still passed alongside, because the comment path sends the
+   * delivery as a private reply and private replies cannot carry a card.
+   */
+  const card: DmCard | undefined =
+    funnel.delivery_card_title && funnel.delivery_link
+      ? {
+          title: renderDmCopy(funnel.delivery_card_title, vars),
+          subtitle: funnel.delivery_card_subtitle
+            ? renderDmCopy(funnel.delivery_card_subtitle, vars)
+            : null,
+          image_url: funnel.delivery_card_image,
+          default_action_url: funnel.delivery_link,
+          buttons: [
+            {
+              type: "web_url",
+              title: funnel.delivery_button_label?.trim() || "Read it",
+              url: funnel.delivery_link,
+            },
+          ],
+        }
+      : undefined;
+
   await send(supabase, account, subscriber, copy, {
     runId: run.id,
     safeMode,
     method: opts.sendAs?.method,
     commentId: opts.sendAs?.commentId,
+    card,
   });
 
   await setState(supabase, run.id, {
@@ -617,7 +687,15 @@ export async function handleComment(
 
 export async function handleMessage(
   supabase: AdminClient,
-  event: { igsid: string; text: string; messageId?: string }
+  event: { igsid: string; text: string; messageId?: string },
+  // `forceSafeMode` exists for the Test button in /crm/automations. It walks a
+  // synthetic subscriber through the real state machine — same branching, same
+  // rows written — while guaranteeing nothing leaves for Instagram. Without it
+  // a test against a made-up IGSID would fire genuine Graph calls that fail,
+  // which teaches you about Meta's error codes rather than about your funnel.
+  //
+  // It can only ever *add* safety: it forces safe mode on, never off.
+  opts?: { forceSafeMode?: boolean }
 ): Promise<DmEventResult> {
   const now = new Date().toISOString();
   let subscriber = await upsertSubscriber(supabase, event.igsid, { last_inbound_at: now });
@@ -660,14 +738,21 @@ export async function handleMessage(
   const account = await getAccount(supabase, funnel.account_id);
   if (!account) return { handled: false, note: "no active instagram account" };
 
-  const cfg = await getCrmSettings(supabase);
+  const settings = await getCrmSettings(supabase);
+  const cfg = opts?.forceSafeMode ? { ...settings, safe_mode: true } : settings;
 
   await setState(supabase, run.id, { dm_window_expires_at: windowExpiresAt(now).toISOString() });
 
   // Refresh who they are — and, critically, whether they follow. This is the
   // only place the follow flag can be read: the profile endpoint needs an IGSID
   // that came from a messaging webhook.
-  const profile = await getDmUserProfile(event.igsid, account.access_token);
+  // Skipped for a forced-safe test run: a synthetic IGSID has no profile, so
+  // this is a guaranteed round-trip to Meta that returns nothing. Leaving it in
+  // makes the Test button slow and litters the log with 100-level errors that
+  // have nothing to do with the funnel being tested.
+  const profile = opts?.forceSafeMode
+    ? null
+    : await getDmUserProfile(event.igsid, account.access_token);
   if (profile) {
     subscriber = await upsertSubscriber(supabase, event.igsid, {
       name: profile.name ?? null,
@@ -729,6 +814,19 @@ export async function handleMessage(
         await send(supabase, account, subscriber, renderDmCopy(funnel.email_prompt_dm, vars), {
           runId: run.id,
           safeMode: cfg.safe_mode,
+          /**
+           * The ask arrives with a one-tap chip carrying the address already on
+           * their Instagram profile. Typing an email on a phone keyboard is the
+           * single widest gap in this funnel — everyone who wanted the thing
+           * but not enough to type twelve characters is lost here.
+           *
+           * Their tap comes back as an ordinary inbound message whose text IS
+           * the address, so `extractEmail` above picks it up with no new code
+           * path and nothing extra to subscribe to. The chip simply does not
+           * render for anyone whose profile has no email, and they type as
+           * before.
+           */
+          quickReplies: [{ content_type: "user_email", payload: "dm_funnel_email" }],
         });
       }
       await setState(supabase, run.id, { state: "awaiting_email" });

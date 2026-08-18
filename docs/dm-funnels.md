@@ -551,6 +551,42 @@ share a word, so a replacement can be written before the old one is retired.
 
 ---
 
+## Cards and chips
+
+Instagram accepts three message shapes on this rail. Which one to use is not a
+styling decision — it changes what the person can do.
+
+**Text.** The default. A URL inside one gets a link-preview panel drawn *above*
+it by Instagram, while the raw `https://…` stays in the sentence below. One
+message, but the link visibly appears twice, and there is no flag to suppress
+the preview or attach a button to it.
+
+**Link card** (generic template). The same preview panel with the URL moved into
+a button, so the picture survives and the duplicate does not. Set
+`delivery_card_title` on a funnel to switch its delivery over; leaving it null
+keeps the old text behaviour, which is what every funnel written before
+migration 303 still does. Meta's limits are 80 characters of title, 80 of
+subtitle, 3 buttons, 10 cards — enforced in `messaging.ts` and again as a column
+constraint, because overrunning any of them is a 400 that costs a delivery.
+
+Cards only go out on the ordinary DM path. A private reply and a public comment
+reply are both text-only, so a card requested on those paths falls back to text
+— which is why `deliver()` still renders `delivery_dm` even when a card exists.
+
+**Quick replies.** Tappable chips under a text message, up to 13, titles capped
+at 20 characters. `content_type: "user_email"` is the valuable one: it offers
+the address on the person's Instagram profile as a single tap. The email ask
+carries one, because typing an email on a phone keyboard is the widest gap in
+this funnel. Their tap arrives as an ordinary inbound message whose text *is*
+the address, so `extractEmail` handles it with no new code path.
+
+Neither needs a new permission. Quick replies and `web_url` buttons both arrive
+back through the `messages` webhook already subscribed. Only `postback` buttons
+would need `messaging_postbacks` added to `subscribed_fields`, which is why
+nothing here uses one yet.
+
+---
+
 ## What is deliberately NOT built
 
 **A `send_dm` workflow step.** Workflow steps run on a 5-minute cron with delays

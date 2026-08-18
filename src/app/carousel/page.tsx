@@ -92,6 +92,9 @@ export default function CarouselPage() {
   /* Track which field is currently being edited */
   const [editingField, setEditingField] = useState<string | null>(null);
 
+  /* Delete confirmation dialog */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const hasEdits = Object.keys(edits).length > 0;
 
   /* ── data loading ───────────────────────────────────────────────────── */
@@ -132,6 +135,30 @@ export default function CarouselPage() {
       setTimeout(() => setNote(null), 4000);
     } else {
       setNote((await res.json()).error || 'Failed');
+    }
+  };
+
+  /* ── delete action ──────────────────────────────────────────────────── */
+
+  const deleteDraft = async () => {
+    if (!open) return;
+    setBusy(true);
+    const res = await fetch(`/api/carousel/drafts/${open.id}`, {
+      method: 'DELETE',
+    });
+    setBusy(false);
+    setConfirmDelete(false);
+    if (res.ok) {
+      setNote('Deleted');
+      setOpen(null);
+      setEdits({});
+      setEditingField(null);
+      load();
+      setTimeout(() => setNote(null), 4000);
+    } else {
+      const err = await res.json().catch(() => null);
+      setNote(err?.error || 'Delete failed');
+      setTimeout(() => setNote(null), 4000);
     }
   };
 
@@ -365,7 +392,7 @@ export default function CarouselPage() {
           </p>
         </div>
         {note && (
-          <span className={`text-xs ${note.includes('Failed') ? 'text-red-400' : 'text-emerald-400'}`}>
+          <span className={`text-xs ${note.includes('Failed') || note.includes('failed') ? 'text-red-400' : 'text-emerald-400'}`}>
             {note}
           </span>
         )}
@@ -400,7 +427,7 @@ export default function CarouselPage() {
       ) : (
         /* ── single draft view with inline editing ──────────────────────── */
         <div>
-          <button onClick={() => { setOpen(null); setEdits({}); setEditingField(null); }} className="text-xs text-minimal-muted hover:text-white mb-6">
+          <button onClick={() => { setOpen(null); setEdits({}); setEditingField(null); setConfirmDelete(false); }} className="text-xs text-minimal-muted hover:text-white mb-6">
             &larr; All carousels
           </button>
           <div className="flex items-center gap-4 mb-6">
@@ -497,6 +524,29 @@ export default function CarouselPage() {
             </div>
           )}
 
+          {/* ── delete confirmation dialog ───────────────────────────────── */}
+          {confirmDelete && (
+            <div className="mb-6 max-w-2xl px-4 py-3 rounded-lg border border-red-500/40 bg-red-500/5">
+              <p className="text-sm text-red-400 mb-3">Delete this carousel draft? This cannot be undone.</p>
+              <div className="flex items-center gap-3">
+                <button
+                  disabled={busy}
+                  onClick={deleteDraft}
+                  className="px-5 py-1.5 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                >
+                  {busy ? 'Deleting...' : 'Yes, delete'}
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => setConfirmDelete(false)}
+                  className="px-4 py-1.5 text-xs border border-minimal-border text-minimal-muted hover:text-white rounded transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* ── action bar ───────────────────────────────────────────────── */}
           <div className="flex flex-wrap items-center gap-4 max-w-2xl">
             {open.status === 'draft' && (
@@ -523,6 +573,13 @@ export default function CarouselPage() {
               className="px-5 py-2.5 text-sm border border-minimal-border text-minimal-muted hover:text-white rounded-lg transition-colors"
             >
               Archive
+            </button>
+            <button
+              disabled={busy || confirmDelete}
+              onClick={() => setConfirmDelete(true)}
+              className="px-5 py-2.5 text-sm border border-red-500/40 text-red-400 hover:border-red-500 hover:text-red-300 rounded-lg transition-colors"
+            >
+              Delete
             </button>
             <div className="flex-1 min-w-[280px] flex gap-2">
               <input

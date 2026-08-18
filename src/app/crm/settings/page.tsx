@@ -96,7 +96,13 @@ export default function CrmSettingsPage() {
         <div className="grid lg:grid-cols-2 gap-10 max-w-6xl">
           {/* Sending */}
           <section className="border border-minimal-border rounded-lg p-6 flex flex-col gap-4">
-            <h2 className="text-[13px] font-semibold text-zinc-300">Email sending</h2>
+            {/* This switch predates the DM layer, and its old "Email sending"
+                title made it look narrower than it is. `crm_safe_mode` gates
+                every outbound message the CRM can produce — workflow email,
+                agent actions, and Instagram DM replies. Someone turning it on
+                to be careful about email was silently turning off the DM funnel
+                too, with no way to tell from this page. */}
+            <h2 className="text-[13px] font-semibold text-zinc-300">Sending — email and DMs</h2>
 
             <div
               className={`px-4 py-3 border rounded-lg flex items-center justify-between ${
@@ -105,12 +111,14 @@ export default function CrmSettingsPage() {
             >
               <div>
                 <p className={`text-xs ${safeMode ? 'text-yellow-500' : 'text-green-500'}`}>
-                  {safeMode ? 'Safe mode — emails are simulated' : 'Live — emails really send'}
+                  {safeMode
+                    ? 'Safe mode — nothing is actually sent'
+                    : 'Live — emails and Instagram DMs really send'}
                 </p>
                 <p className="text-xs text-zinc-500 mt-1">
                   {safeMode
-                    ? 'Workflows run fully but log emails instead of sending. Perfect while you test.'
-                    : 'Requires RESEND_API_KEY on the worker + a verified sending domain in Resend.'}
+                    ? 'Workflows and DM funnels run fully, but write the message down instead of sending it. Perfect while you test.'
+                    : 'Email requires RESEND_API_KEY on the worker + a verified sending domain in Resend. DMs also need a connected Instagram account.'}
                 </p>
               </div>
               <GhostBtn

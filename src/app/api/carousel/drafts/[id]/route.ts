@@ -1,13 +1,14 @@
 /**
  * One carousel draft.
- * GET   — full draft incl. spec (the review screens read this)
- * PATCH — status changes and revisions, all on the SAME row:
+ * GET    — full draft incl. spec (the review screens read this)
+ * PATCH  — status changes and revisions, all on the SAME row:
  *   { status: "approved" }                  draft -> approved
  *   { status: "archived" }                  any   -> archived
  *   { status: "draft" }                     approved -> draft (re-open)
  *   { feedback, spec?, caption?, changed_slides? }
  *       appends to revision_history, bumps revision, returns status to draft
  *       so a revised carousel always needs a FRESH approval.
+ * DELETE — hard-deletes the draft row permanently
  *
  * Approval hands the draft to the human publishing flow — it does not post
  * anything anywhere. There is deliberately no "publish" here.
@@ -106,4 +107,29 @@ export async function PATCH(
   }
 
   return NextResponse.json({ error: "Provide status or feedback" }, { status: 400 });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const auth = await authenticateSessionOrApiKey(request);
+  if (!auth.authenticated) return unauthorizedResponse(auth.error);
+  const { id } = await params;
+
+  const supabase = createAdminClient();
+  const { data: draft } = await supabase
+    .from("carousel_drafts")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!draft) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const { error } = await supabase
+    .from("carousel_drafts")
+    .delete()
+    .eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true, deleted: id });
 }

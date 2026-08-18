@@ -236,7 +236,31 @@ export async function POST(request: NextRequest) {
     console.error("meta webhook:", e);
   }
 
-  if (!results.length) console.warn("meta webhook: delivery matched no handler");
+  // The shape log above says a delivery arrived; it does not say why we ignored
+  // it. Four separate `continue`s in the message loop can drop one — no
+  // `message` field (a read/delivery/reaction receipt), an echo of our own
+  // send, empty text, or sender === the account itself — and every one of them
+  // happens BEFORE `claim()` writes to meta_webhook_events. So a dropped
+  // delivery leaves no row anywhere and reads exactly like Meta never calling.
+  //
+  // On a miss, print the payload. It fires only when nothing was handled, so it
+  // cannot spam a working log, and it goes to `wrangler tail` — ephemeral — not
+  // to storage.
+  if (!results.length) {
+    console.warn("meta webhook: delivery matched no handler", body);
+    // Also persist it, so the Automations activity feed can show "Instagram
+    // called us and we ignored it" instead of showing nothing. `claim()` is
+    // deliberately not reused here: its whole job is de-duplication by event
+    // id, and a dropped delivery may have no usable id at all.
+    await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from("meta_webhook_events" as any)
+      .insert({
+        event_key: `unmatched:${new Date().toISOString()}:${body.length}`,
+        object_type: "unmatched",
+        payload: JSON.parse(body) as never,
+      });
+  }
 
   return NextResponse.json({ ok: true, results });
 }
