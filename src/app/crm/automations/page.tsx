@@ -21,6 +21,7 @@ import {
   Field,
   GhostBtn,
   Loading,
+  Modal,
   PageHeader,
   PrimaryBtn,
   Select,
@@ -81,6 +82,8 @@ export default function AutomationsPage() {
   const [testText, setTestText] = useState('');
   const [testLog, setTestLog] = useState<{ direction: string; body: string }[]>([]);
   const [testing, setTesting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<Funnel | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const toast = useToast();
   const showToast = toast.show;
 
@@ -149,6 +152,23 @@ export default function AutomationsPage() {
       toast.show(e instanceof Error ? e.message : 'Test failed');
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function deleteFunnel(funnel: Funnel) {
+    setDeleting(true);
+    try {
+      await api('/api/crm/automations', {
+        method: 'DELETE',
+        body: JSON.stringify({ id: funnel.id }),
+      });
+      toast.show(`"${funnel.name}" archived`);
+      setConfirmDelete(null);
+      load();
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'Delete failed', 'err');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -251,6 +271,13 @@ export default function AutomationsPage() {
                   </GhostBtn>
                   <GhostBtn onClick={() => setEditing(editing?.id === f.id ? null : f)}>
                     {editing?.id === f.id ? 'Close' : 'Edit replies'}
+                  </GhostBtn>
+                  <GhostBtn
+                    danger
+                    onClick={() => setConfirmDelete(f)}
+                    title="Archive this funnel"
+                  >
+                    Delete
                   </GhostBtn>
                 </div>
               </div>
@@ -479,6 +506,33 @@ export default function AutomationsPage() {
           </div>
         </section>
       </div>
+
+      {/* ── Delete confirmation ────────────────────────────────────── */}
+      {confirmDelete && (
+        <Modal title="Archive this funnel?" onClose={() => setConfirmDelete(null)}>
+          <div className="flex flex-col gap-4">
+            <p className="text-[14px] text-zinc-300">
+              <span className="text-white font-medium">{confirmDelete.name}</span> will be
+              archived. It will stop matching keywords and disappear from this list.
+            </p>
+            <p className="text-[13px] text-zinc-500">
+              The funnel and all its stats stay in the database — this is reversible.
+              {confirmDelete.in_flight > 0 && (
+                <span className="text-yellow-500 block mt-2">
+                  {confirmDelete.in_flight} conversation{confirmDelete.in_flight === 1 ? ' is' : 's are'} still
+                  in progress. Archiving will stop them from completing.
+                </span>
+              )}
+            </p>
+            <div className="flex gap-2 justify-end pt-2">
+              <GhostBtn onClick={() => setConfirmDelete(null)}>Cancel</GhostBtn>
+              <GhostBtn danger onClick={() => deleteFunnel(confirmDelete)} disabled={deleting}>
+                {deleting ? 'Archiving…' : 'Archive'}
+              </GhostBtn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

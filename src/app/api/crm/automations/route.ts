@@ -1,6 +1,7 @@
 /**
- * GET   /api/crm/automations — every DM funnel, with its live counters
- * PATCH /api/crm/automations — update one funnel (status, copy, gates)
+ * GET    /api/crm/automations — every DM funnel, with its live counters
+ * PATCH  /api/crm/automations — update one funnel (status, copy, gates)
+ * DELETE /api/crm/automations — soft-delete (archive) a funnel
  *
  * The DM funnels were built before they had a screen, which meant the only way
  * to read the words the account says to a stranger — or to take one live — was
@@ -70,10 +71,16 @@ export async function GET(request: NextRequest) {
 
   const supabase = createAdminClient();
 
-  const { data: funnels, error } = await t(supabase)
+  const includeArchived = request.nextUrl.searchParams.get("include_archived") === "1";
+
+  let query = t(supabase)
     .from("dm_funnels")
     .select("*")
     .order("created_at", { ascending: false });
+  if (!includeArchived) {
+    query = query.neq("status", "archived");
+  }
+  const { data: funnels, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // In-flight runs per funnel — someone mid-conversation right now. This is the
@@ -212,4 +219,42 @@ export async function PATCH(request: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ funnel: data });
+}
+
+
+export async function DELETE(request: NextRequest) {
+  const auth = await authenticateSessionOrApiKey(request);
+  if (!auth.authenticated) return unauthorizedResponse(auth.error);
+
+  const body = await request.json().catch(() => ({}));
+  const id = typeof body.id === "string" ? body.id : "";
+  if (!id) return NextResponse.json({ error: "id is required" }, { status: 400 });
+
+  const supabase = createAdminClient();
+
+  // Verify the funnel exists and isn't already archived
+  const { data: existing, error: lookupErr } = await t(supabase)
+    .from("dm_funnels")
+    .select("id, name, status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (lookupErr) return NextResponse.json({ error: lookupErr.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "Funnel not found" }, { status: 404 });
+  if (existing.status === "archived") {
+    return NextResponse.json({ error: "Already archived" }, { status: 400 });
+  }
+
+  // Soft-delete: set status to "archived". The funnel stays in the database
+  // with all its stats and history intact, but is hidden from the GET list
+  // and will not match any incoming keywords (the runner only queries active
+  // funnels). This is reversible — a direct database update can restore it.
+  const { error } = await t(supabase)
+    .from("dm_funnels")
+    .update({ status: "archived" })
+    .eq("id", id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ archived: true, id, name: existing.name });
 }
