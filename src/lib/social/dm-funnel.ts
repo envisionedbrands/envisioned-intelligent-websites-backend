@@ -826,7 +826,11 @@ export async function handleMessage(
            * render for anyone whose profile has no email, and they type as
            * before.
            */
-          quickReplies: [{ content_type: "user_email", payload: "dm_funnel_email" }],
+          // quickReplies disabled — user_email chip returns "Invalid data" on
+          // Instagram Graph API for non-partner apps. Plain text ask works fine;
+          // extractEmail picks up their typed reply. Re-enable when Meta approves
+          // the permission.
+          // quickReplies: [{ content_type: "user_email", payload: "dm_funnel_email" }],
         });
       }
       await setState(supabase, run.id, { state: "awaiting_email" });
