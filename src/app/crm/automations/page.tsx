@@ -82,6 +82,7 @@ export default function AutomationsPage() {
   const [testLog, setTestLog] = useState<{ direction: string; body: string }[]>([]);
   const [testing, setTesting] = useState(false);
   const toast = useToast();
+  const showToast = toast.show;
 
   const load = useCallback(async () => {
     try {
@@ -94,11 +95,17 @@ export default function AutomationsPage() {
       setAccount(f.account);
       setActivity(a.items);
     } catch (e) {
-      toast.show(e instanceof Error ? e.message : 'Could not load automations');
+      showToast(e instanceof Error ? e.message : 'Could not load automations');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+    // Depend on `showToast`, never on the `toast` object. useToast() returns a
+    // fresh object literal every render, so `[toast]` rebuilt `load` on every
+    // render, which re-fired the mount effect below on every render — an
+    // infinite fetch loop hammering this API several times a second until the
+    // Worker blew its CPU limit (Error 1102, 2026-08-18). `show` is
+    // useCallback([]) inside the hook, so it is stable and this runs once.
+  }, [showToast]);
 
   useEffect(() => {
     load();
