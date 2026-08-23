@@ -723,6 +723,23 @@ export async function handleMessage(
   // moment a welcome belongs. Answering "yes please" must not re-greet them.
   let startsRun = false;
 
+  // ── BUG FIX: expire stale runs ───────────────────────────────────────────
+  // A run that has had no activity in 24 hours (or whose messaging window has
+  // closed) is stale. Letting it catch unrelated messages means someone who
+  // once said "MAP" and never finished now has every future DM swallowed by
+  // the abandoned run. Expire it and let the message fall through to keyword
+  // matching so they can start fresh.
+  if (run) {
+    const rawRun = run as DmRun & { dm_window_expires_at?: string | null; updated_at?: string | null };
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    const windowExpired = rawRun.dm_window_expires_at && new Date(rawRun.dm_window_expires_at).getTime() < Date.now();
+    const noActivity = rawRun.updated_at && (Date.now() - new Date(rawRun.updated_at).getTime()) > TWENTY_FOUR_HOURS;
+    if (windowExpired || noActivity) {
+      await setState(supabase, run.id, { state: "expired" });
+      run = null; // fall through to keyword matching below
+    }
+  }
+
   if (run) {
     const { data } = await dm(supabase).from("dm_funnels").select("*").eq("id", run.funnel_id).maybeSingle();
     funnel = data as DmFunnel | null;
@@ -779,11 +796,16 @@ export async function handleMessage(
   // the first thing a stranger hears from the account is a request for their
   // email address, which reads like a form rather than a person. Sent once, on
   // the message that starts the run, and only when she has written one.
+  //
+  // BUG FIX: after sending the welcome, RETURN immediately. The gates must wait
+  // for the person's next message — sending the welcome and the follow/email
+  // prompt in the same request cycle makes them arrive back-to-back.
   if (startsRun && funnel.welcome_dm) {
     await send(supabase, account, subscriber, renderDmCopy(funnel.welcome_dm, vars), {
       runId: run.id,
       safeMode: cfg.safe_mode,
     });
+    return { handled: true, funnel: funnel.name, state: run.state };
   }
 
   // ── Gate 1: the follow ────────────────────────────────────────────────────
@@ -795,6 +817,8 @@ export async function handleMessage(
         runId: run.id,
         safeMode: cfg.safe_mode,
       });
+      await setState(supabase, run.id, { state: "awaiting_follow" });
+      return { handled: true, funnel: funnel.name, state: "awaiting_follow" };
     }
     await setState(supabase, run.id, { state: "awaiting_follow" });
     return { handled: true, funnel: funnel.name, state: "awaiting_follow" };
