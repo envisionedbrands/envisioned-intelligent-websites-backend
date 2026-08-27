@@ -125,7 +125,7 @@ export default function DataDeletionPage() {
         </Section>
 
         <p className="text-[12px] text-zinc-600 pt-6 border-t border-minimal-border">
-          Envisioned Brands · Rooijsestraat 5, 6621AH Dreumel, Netherlands
+          Maria-Ines Design Studio, trading as Envisioned · Rooijsestraat 5, 6621AH Dreumel, Netherlands
         </p>
       </div>
     </div>

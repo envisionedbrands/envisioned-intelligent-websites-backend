@@ -114,7 +114,7 @@ async function generateOne(
       model: "claude-opus-4-8",
       max_tokens: 2000,
       thinking: { type: "adaptive" },
-      system: `You write as Maria-Ines of Envisioned Brands. Her voice rules are below and are absolute — the banned phrases are banned, not discouraged.
+      system: `You write as Maria-Ines of Envisioned. Her voice rules are below and are absolute — the banned phrases are banned, not discouraged.
 
 ${context}
 
