@@ -2,6 +2,213 @@
 
 All notable changes to the Digital Home Backend Starter.
 
+## [Unreleased]
+
+## [2.8.0] — 2026-09-07
+
+- Optional social calendar: new Homes start off without requiring R2. The shell
+  explains activation; social APIs and cron are disabled while CRM/articles work.
+- Existing installations without the new flag retain their enabled behavior.
+- Setup guidance explains the dashboard login and expected R2 activation, avoids
+  compiling twice, and separates core handover from later brand/content work.
+
+No database migration or new secret. Preserve existing settings when upgrading;
+see UPGRADE.md before applying the new starter configuration.
+
+## [2.7.4] — 2026-09-04
+
+Agents now keep their worktrees inside the repo:
+
+- New `AGENTS.md` carries the worktree convention: create at `.worktrees/<task>`,
+  reuse when continuing recent work, remove the worktree and delete the branch
+  in the same turn once merged, and skip `npm install` unless the task builds
+  or tests.
+- `CLAUDE.md` now begins with `@AGENTS.md`, so Claude Code and Buzz agents read
+  one set of agent rules.
+- `.worktrees/` is gitignored.
+
+No migration, route change, or new secret is required.
+
+## [2.7.3] — 2026-08-27
+
+The article workspace now says what each surface actually contains:
+
+- The sidebar calls the workspace **Articles** while preserving the existing
+  `/content` route and article lifecycle.
+- Its secondary navigation is **Pipeline | Published**. Published requests
+  only published rows from the existing status-filtered articles endpoint;
+  drafts and archived articles remain in their Pipeline columns.
+- Fresh published cards reserve space for the **New** badge, so the badge no
+  longer overlaps long titles.
+
+No migration, route change, or new secret is required.
+
+## [2.7.2] — 2026-08-26
+
+Brand publication now powers downstream AI as one verified operation:
+
+- Every successful Playbook publish also upserts a deterministic, machine-ready
+  seven-row projection into `brand_context` for audience, positioning, voice,
+  standing rules, never-say language, proof, and offer core.
+- Re-publishing the same Playbook repairs missing or stale projection rows
+  without duplicating the visible shelf edition. Independent operational rows
+  such as CTA links, author identity, and image style are never overwritten.
+- `publish-brand-playbook.mjs sync` safely backfills an existing live Playbook,
+  and both `publish` and `sync` read the route back to verify the shelf metadata,
+  projection fingerprint, and readiness.
+- The article writer refuses to generate generic copy when core Playbook context
+  is incomplete. Active offers and CTA links are checked separately; absent
+  operational data never causes an invented price, destination, testimonial,
+  status, or availability claim.
+
+No migration or new secret is required.
+
+The Brand shelf is now live-publishable without a full Digital Home deploy.
+An approved playbook can be sent through the signed, authenticated
+`/api/brand/playbooks` endpoint with `scripts/publish-brand-playbook.mjs`;
+`/brand` reads the current and archived editions from `backend_settings` and
+falls back to the bundled `brand/playbook.json` on older installations or a
+temporary database failure. Replacing a playbook archives the previous one,
+and publishing the same edition twice is idempotent. No migration or new
+secret is required.
+
+The CRM home becomes the **Command Centre** — the page that answers "what's
+the state of my business?" in five seconds. One status sentence, the business
+drawn as a flowing Leads → Nurture → Pipeline → Revenue strip (animated
+connectors, each stage clickable through to its working screen), a "Waiting
+on you" panel of open tasks, upcoming appointments, and a live activity feed
+refreshing every 20 seconds. The sidebar leads with Command and its working
+screens; logging in lands there.
+
+Revenue now reaches the ledger: a payment webhook capturing
+`custom.booking_amount_cents` (e.g. Stripe event bookings on the frontend)
+automatically records a WON opportunity at the booking amount — idempotent
+per Stripe session, test-mode ignored. A one-time
+`scripts/backfill-event-bookings.mjs` records historical bookings that
+landed on leads before this shipped. The landing stage is configurable via
+the `crm_won_stage_name` setting (defaults to the pipeline's last stage).
+
+Pipeline value becomes a forecast: open deals with no value contribute their
+stage's estimate from the `crm_stage_estimates` setting
+(`{ "default_cents": 1400, "stages": { "Nurturing": 14700 } }`); the Command
+Centre shows estimated totals with a `~` marker so forecast is never mistaken
+for booked money. No database migration is required.
+
+The lead detail page now tells the lead's whole story: an at-a-glance strip
+(score, source, next appointment, open tasks), an attribution card (capture
+source, funnel first touch with UTMs and referrer, linked website-visitor
+intel), a collected-data card showing every submitted custom key, and a
+day-grouped timeline with filter chips (all/emails/notes/system) where email
+entries open the stored as-sent preview. The unused custom-fields editor is
+gone from the page (definitions stay manageable in Settings; merge tags and
+workflows read `lead.custom` directly). Two new capabilities ride along: a
+one-off email composer (`POST /api/crm/leads/[id]/email`) that sends through
+the normal engine — merge tags, suppression, and safe mode all apply — and
+inbound reply capture: the Resend webhook now handles `email.received`,
+matching a reply to its lead by sender address, logging it on the timeline,
+and promoting a `new` lead to `engaged`. Enabling replies needs only an MX
+record on the SENDING subdomain (never the root domain) plus the inbound
+event ticked on the Resend webhook. No database migration is required.
+
+CRM capture now accepts validated UUID offer references and surfaces
+lead-lookup failures instead of treating them as a missing lead. The paired
+frontend starter now routes public lead capture through this endpoint, strips
+privileged workflow/provider fields, links the anonymous visitor through
+`visitors.lead_id`, provides fail-closed handling for payment/entitlement
+events, and preserves contact messages in its non-critical fallback. No
+database migration is required; frontend deployments must configure
+`BACKEND_URL` and set `CRM_CAPTURE_KEY` to
+`backend_settings.crm_capture_key`.
+
+## [2.6.0] — 2026-08-21
+
+The brand playbook page:
+
+- New `/brand` page ("Brand" in the sidebar) is your playbook shelf: one
+  card per brand research playbook you have run, newest first, with the
+  current one marked. Click a card to read the whole playbook — audience,
+  transformation, urgency gateway, pain points, language map, where they
+  gather, marketing recommendation, competitive landscape, the offer, plus
+  your standing copy rules, proof asset, and known gaps.
+- **It starts empty.** Your Digital Home ships with no brand research in
+  it. When your brand strategist runs your research, it writes the result
+  to `brand/playbook.json` and the page fills itself in — nothing to wire.
+- Its shape is documented in `brand/playbook.schema.json`. Each playbook
+  carries its own `narrative` block (standing copy rules, proof asset,
+  known gaps, never-say list), so a playbook is self-contained and nothing
+  has to be kept in sync by hand.
+- To keep an old playbook when you run new research, archive it into
+  `brand/playbooks/` — see the instructions in `brand/playbooks/index.ts`.
+- The sidebar wordmark now reads "Digital Home".
+- No database changes.
+
+## [2.5.11] — 2026-08-20
+
+Multi-funnel dashboard:
+
+- The funnel dashboard now handles more than one funnel. Every funnel
+  registers itself the moment its first event arrives (the slug the funnel
+  template sends with each event is the registration; nothing to configure),
+  and a funnel selector appears in the dashboard header once a second
+  funnel exists. The default view is the busiest funnel in the window.
+- The stats API (`/api/crm/funnel`) returns the distinct funnels seen in
+  the window with session counts, and each funnel's domain is derived from
+  its own event URLs. No database changes.
+
+## [2.5.10] — 2026-08-20
+
+Funnel capture with a single secret:
+
+- The lead capture endpoint (`/api/crm/capture`) now also accepts the
+  `crm_funnel_secret` value in its `x-capture-key` header. Funnels built
+  from `digital-home-funnel-starter` send one secret to both the analytics
+  ingest and lead capture doors; previously leads only landed when the
+  separate `crm_capture_key` setting held the same value. One secret now
+  works out of the box. No database changes.
+
+## [2.5.9] — 2026-08-18
+
+Social scheduling and Facebook analytics hardening:
+
+- Retrying a failed or partially published post preserves its original
+  `scheduled_at` calendar slot. Previously the retry time replaced the
+  intended publish time, making 11:00 posts appear to move to early morning.
+- Facebook Reel snapshots no longer request the retired
+  `post_impressions_unique` metric. Plays, social actions, likes, and comments
+  are fetched independently, so one unavailable Meta metric cannot discard an
+  otherwise valid snapshot. Facebook Reel reach remains zero because Graph
+  API v23 does not expose a compatible replacement.
+- The native Cloudflare social cron now logs a compact result summary. An
+  explicit `SOCIAL_SCHEDULER_MODE` (`native` or `external`) supports safe
+  cutovers for customized deployments without ever running two schedulers.
+- Added focused retry and Meta regression tests under `npm run test:social`.
+
+No database migration is required.
+
+## [2.5.8] — 2026-08-18
+
+Cosmetic cleanup: removed the leftover v0.1 and v0.2 labels from the
+login page, sidebar, and content pages. Those labels predated the
+current release numbering and made a freshly deployed backend look
+outdated. Your real version lives in the VERSION file and release tags.
+No database or environment changes are required.
+
+## [2.5.7] — 2026-08-17
+
+Three quality-of-life and correctness fixes:
+
+- The Leads list now defaults to newest-created records, adds explicit
+  priority and recent-activity views, and shows lead scores in the table.
+- Article status stays in sync with the content calendar: moving a calendar
+  entry to draft, published, or archived updates the linked article, a
+  publication date is preserved when unpublishing and set on first
+  publication, and the article state is restored if the calendar update
+  fails. Previously, dragging a published article back to Draft left it
+  live on the public site while the CMS showed it as a draft.
+- Clean-checkout builds no longer fail on the generated-module import in
+  `worker.ts` — a fresh clone now builds first time. No database or
+  environment changes are required.
+
 ## [2.5.6] — 2026-08-07
 
 Social platforms for one post now begin concurrently, so an Instagram

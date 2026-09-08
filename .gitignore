@@ -23,3 +23,6 @@ tsconfig.tsbuildinfo
 # ".env*.local" above does not match them because they do not end in ".local".
 .env*.bak*
 *.bak
+
+# Agent worktrees live inside the repo
+.worktrees/

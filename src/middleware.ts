@@ -10,6 +10,7 @@
 
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { socialPublishingEnabled, socialUnavailable } from './lib/social/feature';
 
 export async function middleware(request: NextRequest) {
   // Allow login page, static assets, and the one deliberately public page.
@@ -19,6 +20,8 @@ export async function middleware(request: NextRequest) {
   // database and takes no input — it is static copy. Any future public page
   // must be added here AND to the sidebar suppression in components/sidebar.tsx.
   const { pathname } = request.nextUrl;
+  const unavailable = socialUnavailable(pathname, socialPublishingEnabled(process.env.SOCIAL_PUBLISHING_ENABLED));
+  if (unavailable) return unavailable;
   if (pathname === '/login' || pathname === '/data-deletion' || pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api')) {
     return NextResponse.next();
   }

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 const NAV_ITEMS = [
   {
     href: '/content',
-    label: 'Content',
+    label: 'Articles',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
         <path d="M216,40H40A16,16,0,0,0,24,56V200a16,16,0,0,0,16,16H216a16,16,0,0,0,16-16V56A16,16,0,0,0,216,40ZM40,56H216V96H40ZM40,200V112H216v88Z" />
@@ -44,7 +44,7 @@ const NAV_ITEMS = [
   },
   {
     href: '/crm',
-    label: 'CRM',
+    label: 'Command',
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
         <path d="M224,200h-8V40a8,8,0,0,0-8-8H152a8,8,0,0,0-8,8V80H96a8,8,0,0,0-8,8v40H48a8,8,0,0,0-8,8v64H24a8,8,0,0,0,0,16H224a8,8,0,0,0,0-16ZM160,48h40V200H160ZM104,96h40V200H104ZM56,144H88v56H56Z" />
@@ -127,6 +127,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: '/brand',
+    label: 'Brand',
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 shrink-0" viewBox="0 0 256 256" fill="currentColor">
+        <path d="M228.92,49.69a8,8,0,0,0-6.86-1.45L160.93,63.52,99.58,32.85a8,8,0,0,0-6.71-.06l-64,29.15A8,8,0,0,0,24,69.11V197.87a8,8,0,0,0,11.08,7.4l60.98-27.78,61.35,30.68a8,8,0,0,0,6.71.06l64-29.15A8,8,0,0,0,232,171.87V56A8,8,0,0,0,228.92,49.69ZM104,52.94l48,24V203.06l-48-24Zm-64,21.3,48-21.86v129.4l-48,21.86ZM216,166.76l-48,21.86V59.22l48-21.86Z" />
+      </svg>
+    ),
+  },
+  {
     href: '/crm/settings',
     label: 'Setup',
     icon: (
@@ -135,6 +144,26 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+];
+
+// Command leads: the top-down room comes first, its working screens under it,
+// then the production surfaces. Setup stays last.
+const NAV_ORDER = [
+  '/crm',
+  '/crm/leads',
+  '/crm/pipeline',
+  '/crm/funnel',
+  '/crm/workflows',
+  '/content',
+  '/social',
+  '/brand',
+  '/crm/settings',
+];
+const ORDERED_NAV = [
+  ...NAV_ORDER.map((h) => NAV_ITEMS.find((i) => i.href === h)).filter(
+    (i): i is (typeof NAV_ITEMS)[number] => !!i
+  ),
+  ...NAV_ITEMS.filter((i) => !NAV_ORDER.includes(i.href)),
 ];
 
 function ThemeToggle({ collapsed }: { collapsed: boolean }) {
@@ -247,7 +276,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex flex-col gap-1 px-3 flex-1">
-        {(role === 'social' ? NAV_ITEMS.filter((i) => i.href === '/social') : NAV_ITEMS).map((item) => {
+        {(role === 'social' ? NAV_ITEMS.filter((i) => i.href === '/social') : ORDERED_NAV).map((item) => {
           const isActive =
             item.href === '/crm'
               ? pathname === '/crm'
@@ -273,7 +302,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Theme + version */}
+      {/* Theme */}
       <div className="px-3 flex flex-col gap-1">
         {/* Live site — the round trip with the frontend's Studio link. */}
         <a
@@ -295,7 +324,6 @@ export function Sidebar() {
           {!collapsed && <span className="text-[14px] font-medium">Live site</span>}
         </a>
         <ThemeToggle collapsed={collapsed} />
-        {!collapsed && <div className="px-3 py-1 text-xs text-zinc-600">v0.2</div>}
       </div>
     </aside>
   );

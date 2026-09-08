@@ -67,6 +67,11 @@
     "NEXT_PUBLIC_DIGITAL_HOME_URL": "https://home.envisioned.me",
     "API_SIGNATURE_REQUIRED": "true",
     "API_REQUEST_SIGNATURE_TTL_SECONDS": "300",
+    "SOCIAL_SCHEDULER_MODE": "native",
+    // v2.8.0: social calendar is off until R2 is enabled on this Cloudflare
+    // account (see the disabled r2_buckets binding above). Flip to "true"
+    // once R2 is activated and the bucket is attached.
+    "SOCIAL_PUBLISHING_ENABLED": "false",
     // R2 public base for social media assets. NOT yet claimed — social image
     // and video publishing will fail until this points at a real public
     // domain attached to the SOCIAL_MEDIA bucket.
