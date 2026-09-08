@@ -62,14 +62,20 @@ with 359 leads in the CRM, when Simon (Digital Home Manager) picked it up.
 
 ## Open items
 
-- **Social calendar activation — in progress.** She asked to activate it.
-  R2 is not enabled on the Cloudflare account (confirmed via API, error
-  10042). Waiting on her to enable R2 in the dashboard
-  (https://dash.cloudflare.com/5b3e4b7a633f90c63aa2e908554b9447/r2/overview)
-  before I create the bucket, attach a public media domain, set
-  `R2_PUBLIC_BASE`, flip `SOCIAL_PUBLISHING_ENABLED` to `true`, and redeploy.
-  No social accounts (Instagram/Facebook/YouTube) are connected yet either —
-  that's a separate step after storage is wired.
+- **Social calendar — activated 2026-09-08.** She enabled R2 on the
+  Cloudflare account; created the `social-media` bucket, attached
+  `media.envisioned.me` as its public custom domain (SSL active, verified),
+  set `R2_PUBLIC_BASE` and flipped `SOCIAL_PUBLISHING_ENABLED` to `true`,
+  redeployed. Proved the full upload → R2 → public URL pipeline with a real
+  bounded test post (created as draft, uploaded, verified publicly
+  reachable, then deleted through the app's own delete endpoint — no
+  leftover data). She already has **active connected accounts** from before
+  (2 Facebook pages + 1 Instagram, plus one disconnected Facebook page) —
+  this was not a fresh social setup, the calendar is now live and usable
+  immediately, not pending a separate account-connection step. No posts
+  were sitting in `scheduled`/`publishing` state when this went live, so
+  nothing auto-fired on activation. 3 drafts and 1 previously-published
+  post exist from before.
 - **Welcome nurture workflow** — wired correctly now (`lead_created` trigger)
   but left in `draft`. She hasn't approved the copy for real sending yet
   (safe mode is off, so activating it means real email immediately). Ask
