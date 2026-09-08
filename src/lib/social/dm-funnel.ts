@@ -109,6 +109,7 @@ export interface DmRun {
   funnel_id: string;
   subscriber_id: string;
   state: "opened" | "awaiting_follow" | "awaiting_email" | "delivered" | "expired" | "failed";
+  trigger_source: "comment" | "dm" | null;
   private_reply_used: boolean;
   email_captured: string | null;
 }
@@ -738,6 +739,15 @@ export async function handleMessage(
       await setState(supabase, run.id, { state: "expired" });
       run = null; // fall through to keyword matching below
     }
+  }
+
+  // ── BUG FIX: comment-triggered runs must not advance on stray DMs ────────
+  // A comment-triggered run in "opened" state means we sent the opening_dm as
+  // a private reply but the user has not replied in DMs yet.  Do not let an
+  // unrelated inbound DM advance the gates.  The run stays parked until it
+  // expires via the 24-hour stale check or the user triggers a new run.
+  if (run && run.trigger_source === "comment" && run.state === "opened") {
+    return { handled: false, note: "comment-triggered run awaiting first DM reply" };
   }
 
   if (run) {
