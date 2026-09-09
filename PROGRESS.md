@@ -1,5 +1,39 @@
 # Envisioned — Digital Home Progress
 
+## 2026-09-09 — found and fixed: lead capture was silently broken since 09-01
+
+Prompted by MI asking "is envisioned.me connected to what it needs to connect
+to." Traced the whole chain (homepage → Map/founder-access/contact →
+backend → Supabase) instead of trusting config. Found two real, live bugs:
+
+1. **`digital-home-frontend-starter`'s `API_SECRET_KEY` didn't match the
+   backend's.** Every HMAC-signed frontend→backend call (founder-access,
+   and anything else using `signedCrmPost`) was failing auth. Fixed: synced
+   the frontend's secret to the backend's value via `wrangler secret put`
+   (backend's secret untouched — other consumers of it, e.g. claudeclaw
+   ops tooling, weren't at risk).
+2. **The bigger one: every INSERT into `public.leads` had been failing
+   outright** with `permission denied for table hooks`, since the
+   `ops-daemon-leads` Database Webhook trigger was added 2026-09-01
+   (Stage 3 Client Movement Loop, MI's "ok go" same day) — the trigger
+   calls `supabase_functions.http_request(...)`, and `service_role` had
+   never been granted `USAGE` on the `supabase_functions` schema. This is
+   almost certainly the real explanation for "359 leads, none in the 12
+   days before today" noted below — not a traffic problem, a silent outage.
+   Fixed with `GRANT USAGE ON SCHEMA supabase_functions ...` (+ table/
+   sequence/routine grants) to `service_role, anon, authenticated`.
+
+Verified both fixes with a real test submission through the live
+`founder-access` endpoint (200, real row landed in `leads` +
+`assessment_completions`), then deleted the test row. Lead count back to
+359 afterward, confirmed via direct count.
+
+**Not yet separately verified:** whether the `ops-daemon-leads` webhook
+itself now successfully delivers to `clients.envisioned.me/webhooks/envisioned`
+(the fix targets the INSERT permission, which is what was blocking leads;
+whether the HTTP delivery on the other end succeeds is a smaller, separate
+question worth a follow-up check, not a lead-capture blocker).
+
 ## Where things stand (2026-09-08)
 
 Adopted, not built from scratch. This Home was already live, in real use,
