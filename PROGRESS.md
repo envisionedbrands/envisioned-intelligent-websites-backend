@@ -1,5 +1,26 @@
 # Envisioned — Digital Home Progress
 
+## 2026-09-09 — welcome nurture copy fix (Email 2, "realization" → "realisation")
+
+Lalie (Copy Writer) reviewed the 3-Email Welcome Nurture against the locked
+voice guide and flagged one word in Email 2 ("The day my business understood
+me"): the American spelling "realization" should be "realisation" — British
+spelling is locked in the voice doc. She couldn't verify or fix it herself
+because the workflow appeared to live outside the email template library she
+can reach.
+
+It doesn't live in GHL at all — MI corrected that assumption mid-thread. The
+whole workflow is in this backend's own CRM engine (`workflows` +
+`email_templates` tables in Supabase), not GoHighLevel. Queried the live
+`email_templates` row for Email 2 (id `9d5c5db1-035c-4f09-afdc-3f39119ba30c`,
+`updated_at` was 2026-08-06 — the original draft, not touched since) directly
+from Supabase, confirmed "realization" was still there, patched `body_md` via
+the REST API, then re-fetched fresh to verify: "realization" gone,
+"realisation" present, `updated_at` bumped to now. Spot-checked Emails 1 and
+3 for the same class of American spelling — none found. Workflow (`id`
+`9b7aeaf5-94e2-4203-b0d3-7ad16931eb62`) confirmed still `status: draft`,
+untouched by this fix — no email fired.
+
 ## 2026-09-09 — found and fixed: lead capture was silently broken since 09-01
 
 Prompted by MI asking "is envisioned.me connected to what it needs to connect
@@ -110,9 +131,10 @@ with 359 leads in the CRM, when Simon (Digital Home Manager) picked it up.
   were sitting in `scheduled`/`publishing` state when this went live, so
   nothing auto-fired on activation. 3 drafts and 1 previously-published
   post exist from before.
-- **Welcome nurture workflow** — wired correctly now (`lead_created` trigger)
-  but left in `draft`. She hasn't approved the copy for real sending yet
-  (safe mode is off, so activating it means real email immediately). Ask
+- **Welcome nurture workflow** — wired correctly (`lead_created` trigger),
+  copy reviewed against the voice guide and the one flagged word fixed live
+  (see above). Still held in `draft` — she hasn't said go on activating it
+  yet (safe mode is off, so activating it means real email immediately). Ask
   her before flipping it live.
 - **359 leads, 0 opportunities** — a process gap, not a software one. Worth
   raising with her again: leads are landing, nothing is converting them
