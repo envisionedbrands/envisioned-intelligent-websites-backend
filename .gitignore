@@ -26,3 +26,4 @@ tsconfig.tsbuildinfo
 
 # Agent worktrees live inside the repo
 .worktrees/
+.env.local.studio-secret.*
