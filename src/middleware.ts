@@ -22,7 +22,8 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const unavailable = socialUnavailable(pathname, socialPublishingEnabled(process.env.SOCIAL_PUBLISHING_ENABLED));
   if (unavailable) return unavailable;
-  if (pathname === '/login' || pathname === '/data-deletion' || pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api')) {
+  if (pathname === '/login' || pathname === '/data-deletion' ||
+    pathname === '/studio/workspace' || pathname.startsWith('/_next') || pathname.startsWith('/favicon') || pathname.startsWith('/api')) {
     return NextResponse.next();
   }
 

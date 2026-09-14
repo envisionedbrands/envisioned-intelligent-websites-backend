@@ -2170,6 +2170,441 @@ export type Database = {
         };
         Relationships: [];
       };
+      studio_sources: {
+        Row: {
+          id: string;
+          url: string;
+          platform: "youtube" | "instagram" | "tiktok" | "facebook_ads" | "website" | "article" | "upload";
+          kind: "own" | "competitor" | "inspiration";
+          status: "pending" | "ingesting" | "ready" | "failed";
+          title: string | null;
+          author: string | null;
+          seconds: number | null;
+          published_at: string | null;
+          transcript: string | null;
+          analysis: Json | null;
+          engagement: Json | null;
+          notes: string | null;
+          thumbnail: string | null;
+          mirrored_from: string | null;
+          mirror_key: string | null;
+          added_by: string;
+          added_at: string;
+          refreshed_at: string;
+        };
+        Insert: {
+          id?: string;
+          url: string;
+          platform: string;
+          kind?: string;
+          status?: string;
+          title?: string | null;
+          author?: string | null;
+          seconds?: number | null;
+          published_at?: string | null;
+          transcript?: string | null;
+          analysis?: Json | null;
+          engagement?: Json | null;
+          notes?: string | null;
+          thumbnail?: string | null;
+          mirrored_from?: string | null;
+          mirror_key?: string | null;
+          added_by?: string;
+          refreshed_at?: string;
+        };
+        Update: {
+          url?: string;
+          platform?: string;
+          kind?: string;
+          status?: string;
+          title?: string | null;
+          author?: string | null;
+          seconds?: number | null;
+          published_at?: string | null;
+          transcript?: string | null;
+          analysis?: Json | null;
+          engagement?: Json | null;
+          notes?: string | null;
+          thumbnail?: string | null;
+          refreshed_at?: string;
+        };
+        Relationships: [];
+      };
+      studio_ingest_jobs: {
+        Row: {
+          id: string;
+          source_id: string;
+          status: "queued" | "claimed" | "fetching" | "transcribing" | "analyzing" | "ready" | "failed";
+          stage: string;
+          progress: number;
+          runner_id: string | null;
+          error: string | null;
+          attempts: number;
+          claimed_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          source_id: string;
+          status?: string;
+          stage?: string;
+          progress?: number;
+          runner_id?: string | null;
+          error?: string | null;
+          attempts?: number;
+          claimed_at?: string | null;
+          completed_at?: string | null;
+        };
+        Update: {
+          status?: string;
+          stage?: string;
+          progress?: number;
+          runner_id?: string | null;
+          error?: string | null;
+          attempts?: number;
+          claimed_at?: string | null;
+          completed_at?: string | null;
+        };
+        Relationships: [{
+          foreignKeyName: "studio_ingest_jobs_source_id_fkey";
+          columns: ["source_id"];
+          isOneToOne: false;
+          referencedRelation: "studio_sources";
+          referencedColumns: ["id"];
+        }];
+      };
+      studio_upload_receipts: {
+        Row: {
+          id: string;
+          bucket: string;
+          object_path: string;
+          public_url: string;
+          original_name: string;
+          media: "image" | "pdf";
+          content_type: string;
+          expected_size: number;
+          status: "prepared" | "completed" | "rejected" | "expired" | "cleanup_pending" | "purge_pending" | "purged";
+          source_id: string | null;
+          job_id: string | null;
+          failure_code: string | null;
+          expires_at: string;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          bucket?: string;
+          object_path: string;
+          public_url: string;
+          original_name: string;
+          media: "image" | "pdf";
+          content_type: string;
+          expected_size: number;
+          status?: string;
+          source_id?: string | null;
+          job_id?: string | null;
+          failure_code?: string | null;
+          expires_at: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          status?: string;
+          source_id?: string | null;
+          job_id?: string | null;
+          failure_code?: string | null;
+          expires_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "studio_upload_receipts_source_id_fkey";
+            columns: ["source_id"];
+            isOneToOne: true;
+            referencedRelation: "studio_sources";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "studio_upload_receipts_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: true;
+            referencedRelation: "studio_ingest_jobs";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      studio_boards: {
+        Row: {
+          id: string;
+          name: string;
+          template_key: string | null;
+          status: "building" | "ready" | "failed";
+          graph_revision: number;
+          viewport: Json | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          template_key?: string | null;
+          status?: "building" | "ready" | "failed";
+          graph_revision?: number;
+          viewport?: Json | null;
+        };
+        Update: {
+          name?: string;
+          template_key?: string | null;
+          status?: "building" | "ready" | "failed";
+          graph_revision?: number;
+          viewport?: Json | null;
+        };
+        Relationships: [];
+      };
+      studio_nodes: {
+        Row: {
+          id: string;
+          board_id: string;
+          kind: "source" | "desk" | "note" | "sop" | "group" | "output" | "creative";
+          parent_id: string | null;
+          position: Json;
+          data: Json;
+          source_id: string | null;
+          desk_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          board_id: string;
+          kind: string;
+          parent_id?: string | null;
+          position?: Json;
+          data?: Json;
+          source_id?: string | null;
+          desk_id?: string | null;
+        };
+        Update: {
+          kind?: string;
+          parent_id?: string | null;
+          position?: Json;
+          data?: Json;
+          source_id?: string | null;
+          desk_id?: string | null;
+        };
+        Relationships: [];
+      };
+      studio_edges: {
+        Row: { id: string; board_id: string; from_node: string; to_node: string; created_at: string };
+        Insert: { id?: string; board_id: string; from_node: string; to_node: string };
+        Update: { from_node?: string; to_node?: string };
+        Relationships: [];
+      };
+      studio_gen_jobs: {
+        Row: {
+          id: string;
+          board_id: string;
+          desk_node_id: string | null;
+          prompt: string;
+          model: string;
+          asset_type: string;
+          image_size: Json;
+          reference_urls: Json;
+          count: number;
+          status: "queued" | "claimed" | "generating" | "ready" | "failed" | "submission_unknown" | "cancelled";
+          stage: string;
+          results: Json | null;
+          error: string | null;
+          runner_id: string | null;
+          claimed_at: string | null;
+          provider_request_id: string | null;
+          submission_started_at: string | null;
+          submitted_at: string | null;
+          materialized_at: string | null;
+          completed_at: string | null;
+          dismissed: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          board_id: string;
+          desk_node_id?: string | null;
+          prompt: string;
+          model?: string;
+          asset_type?: string;
+          image_size?: Json;
+          reference_urls?: Json;
+          count?: number;
+          status?: string;
+          stage?: string;
+        };
+        Update: {
+          status?: string;
+          stage?: string;
+          asset_type?: string;
+          image_size?: Json;
+          results?: Json | null;
+          error?: string | null;
+          runner_id?: string | null;
+          claimed_at?: string | null;
+          provider_request_id?: string | null;
+          submission_started_at?: string | null;
+          submitted_at?: string | null;
+          materialized_at?: string | null;
+          completed_at?: string | null;
+          dismissed?: boolean;
+        };
+        Relationships: [];
+      };
+      studio_runner_health: {
+        Row: {
+          instance_id: string;
+          status: "ready" | "blocked";
+          failure_code: "lock_config_invalid" | "lock_unavailable" | "lock_squatter" | "carousel_toolchain_unavailable" | null;
+          capabilities: Json;
+          last_seen_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          instance_id: string;
+          status: "ready" | "blocked";
+          failure_code?: "lock_config_invalid" | "lock_unavailable" | "lock_squatter" | "carousel_toolchain_unavailable" | null;
+          capabilities?: Json;
+          last_seen_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: "ready" | "blocked";
+          failure_code?: "lock_config_invalid" | "lock_unavailable" | "lock_squatter" | "carousel_toolchain_unavailable" | null;
+          capabilities?: Json;
+          last_seen_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      studio_desks: {
+        Row: {
+          id: string;
+          name: string;
+          persona: "none" | "content-manager" | "beacon";
+          sop: string | null;
+          model: string;
+          max_context_tokens: number;
+          settings: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          persona?: string;
+          sop?: string | null;
+          model?: string;
+          max_context_tokens?: number;
+          settings?: Json;
+        };
+        Update: {
+          name?: string;
+          persona?: string;
+          sop?: string | null;
+          model?: string;
+          max_context_tokens?: number;
+          settings?: Json;
+        };
+        Relationships: [];
+      };
+      studio_desk_messages: {
+        Row: {
+          id: string;
+          desk_id: string;
+          role: "user" | "assistant";
+          content: string;
+          meta: Json | null;
+          created_at: string;
+        };
+        Insert: { id?: string; desk_id: string; role: string; content: string; meta?: Json | null; created_at?: string };
+        Update: { content?: string; meta?: Json | null };
+        Relationships: [];
+      };
+      studio_broadcast_operations: {
+        Row: {
+          operation_id: string;
+          payload_hash: string;
+          state: "extracting" | "ready";
+          claim_token: string | null;
+          workflow_id: string | null;
+          template_id: string | null;
+          subject: string | null;
+          estimated: number | null;
+          campaign_tag: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          operation_id: string;
+          payload_hash: string;
+          state?: "extracting" | "ready";
+          claim_token?: string | null;
+          workflow_id?: string | null;
+          template_id?: string | null;
+          subject?: string | null;
+          estimated?: number | null;
+          campaign_tag?: string | null;
+        };
+        Update: {
+          payload_hash?: string;
+          state?: "extracting" | "ready";
+          claim_token?: string | null;
+          workflow_id?: string | null;
+          template_id?: string | null;
+          subject?: string | null;
+          estimated?: number | null;
+          campaign_tag?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      studio_broadcast_decisions: {
+        Row: {
+          workflow_id: string;
+          decision_operation_id: string;
+          decision: "approve" | "reject";
+          campaign_tag: string | null;
+          enrolled: number;
+          decided_at: string;
+        };
+        Insert: {
+          workflow_id: string;
+          decision_operation_id: string;
+          decision: "approve" | "reject";
+          campaign_tag?: string | null;
+          enrolled: number;
+          decided_at?: string;
+        };
+        Update: {
+          decision_operation_id?: string;
+          decision?: "approve" | "reject";
+          campaign_tag?: string | null;
+          enrolled?: number;
+          decided_at?: string;
+        };
+        Relationships: [{
+          foreignKeyName: "studio_broadcast_decisions_workflow_id_fkey";
+          columns: ["workflow_id"];
+          isOneToOne: true;
+          referencedRelation: "workflows";
+          referencedColumns: ["id"];
+        }];
+      };
+      voice_profiles: {
+        Row: { id: string; version: number; profile: Json; source_count: number; generated_at: string };
+        Insert: { id?: string; version: number; profile: Json; source_count?: number };
+        Update: { profile?: Json; source_count?: number };
+        Relationships: [];
+      };
     };
     Views: {};
     Functions: {};

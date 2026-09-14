@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-carousel-contract="{{contract_version}}" data-template-id="{{template_id}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,height=1350">
+<style>
+{{font_faces}}
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1350px;overflow:hidden}
+body{background:#000;color:#fff;font-family:"Studio Inter Tight",sans-serif;-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1080px;height:1350px;padding:62px 78px;background:#000;overflow:hidden;display:flex;flex-direction:column}
+.chrome,.slide-content,.footer{position:relative}
+.chrome{display:flex;justify-content:space-between;color:#777;font-size:16px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.wordmark{color:#fff;font-size:21px}
+.slide-content{margin:auto 0;max-width:900px}
+.slide-heading{margin:0;font-size:76px;line-height:1.03;letter-spacing:-.025em;font-weight:800;text-transform:uppercase}
+.slide-paragraph{max-width:860px;margin:28px 0 0;font-size:38px;line-height:1.35;font-weight:500}
+.slide-list{margin:42px 0 0;padding:0;list-style:none;counter-reset:item}
+.slide-list li{counter-increment:item;display:grid;grid-template-columns:76px 1fr;gap:18px;margin:0;padding:20px 0;border-top:2px solid #fff;font-size:32px;line-height:1.24;font-weight:600}
+.slide-heading,.slide-paragraph,.slide-list,.slide-list li{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+.slide-list li:before{content:counter(item,decimal-leading-zero);font-size:30px;font-weight:900}
+.footer{margin-top:auto;display:flex;justify-content:space-between;align-items:center;color:#777;font-size:16px;font-weight:700;letter-spacing:.09em;text-transform:uppercase}
+.footer strong{color:#fff;font-size:20px}
+.layout-cover .slide-heading{font-size:116px;line-height:.92;font-weight:900}
+.layout-cover .slide-paragraph{font-size:30px;color:#aaa}
+.layout-body .slide-content{margin-top:300px}
+.layout-body .slide-heading{font-size:54px}
+.layout-body .slide-paragraph{font-size:38px}
+.layout-punch .slide-content{margin:auto;text-align:center}
+.layout-punch .slide-heading{font-size:88px;line-height:.98;font-weight:900}
+.layout-punch .slide-paragraph{font-size:30px;color:#aaa}
+.layout-list .slide-heading{font-size:58px}
+.layout-list .slide-list{border-bottom:2px solid #fff}
+.layout-closer .slide-heading{font-size:88px;line-height:.98}
+.layout-closer .slide-paragraph{font-size:38px}
+.layout-closer:before{content:"";position:absolute;inset:44px;border:2px solid #fff}
+.layout-closer .chrome,.layout-closer .footer{padding-left:20px;padding-right:20px}
+.layout-closer .slide-content{padding:0 20px}
+.arrow{font-size:38px;color:#fff}
+
+</style>
+</head>
+<body>
+<main class="slide layout-{{slide_layout}}" data-layout="{{slide_layout}}" data-slide="{{slide_number}}">
+  <header class="chrome"><span class="wordmark">HOUSE MANIFESTO</span><span>SHARE THIS ↗</span></header>
+  <section class="slide-content">{{slide_content}}</section>
+  <footer class="footer"><span>FOLLOW FOR THE NEXT NOTE</span><strong>{{slide_number}} / {{slide_total}} <span class="arrow">→</span></strong></footer>
+</main>
+<div class="studio-asset-preloads" aria-hidden="true" style="position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.001;pointer-events:none">{{asset_preloads}}</div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-carousel-contract="{{contract_version}}" data-template-id="{{template_id}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,height=1350">
+<style>
+{{font_faces}}
+:root{--font-display:"Studio Inter Tight",sans-serif;--font-body:"Studio Inter",sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1350px;overflow:hidden}
+body{background:#1a1817;color:#1a1817;font-family:var(--font-display);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1080px;height:1350px;padding:70px 74px;background:#e2603f;overflow:hidden;display:flex;flex-direction:column}
+.topline,.counter,.slide-content{position:relative;z-index:1}
+.topline{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-body);font-size:16px;font-weight:600;letter-spacing:.09em;text-transform:uppercase}
+.pill{border:2px solid currentColor;border-radius:999px;padding:10px 16px}
+.slide-content{margin:auto 0;max-width:900px}
+.slide-heading{margin:0;font-family:var(--font-display);font-size:88px;line-height:.96;letter-spacing:-.035em;font-weight:900;font-style:italic;text-transform:uppercase}
+.slide-paragraph{max-width:780px;margin:34px 0 0;font-family:var(--font-body);font-size:32px;line-height:1.4;font-weight:500}
+.slide-list{margin:40px 0 0;padding:0;list-style:none;counter-reset:item;max-width:850px}
+.slide-list li{counter-increment:item;position:relative;margin:18px 0;padding:22px 28px 22px 88px;border:3px solid currentColor;border-radius:999px;font-family:var(--font-body);font-size:28px;line-height:1.24;font-weight:600}
+.slide-heading,.slide-paragraph,.slide-list,.slide-list li{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+.slide-list li:before{content:counter(item);position:absolute;left:22px;top:17px;display:grid;place-items:center;width:45px;height:45px;border-radius:50%;background:#1a1817;color:#f8f4ee;font-size:20px}
+.counter{margin-top:auto;display:flex;align-items:center;justify-content:space-between;font-family:var(--font-body);font-size:18px;font-weight:600;letter-spacing:.08em}
+.progress{width:680px;height:12px;border:2px solid currentColor;border-radius:99px;overflow:hidden}
+.progress:after{content:"";display:block;width:100%;height:100%;background:currentColor}
+.layout-cover,.layout-closer{background:#e2603f}
+.layout-cover:after,.layout-closer:after{content:"";position:absolute;width:430px;height:430px;border:80px solid rgba(248,244,238,.32);border-radius:50%;right:-130px;bottom:-90px}
+.layout-cover .slide-heading{font-size:108px}
+.layout-cover .slide-paragraph{font-size:28px}
+.layout-overview{background:#1a1817;color:#f8f4ee}
+.layout-overview .slide-content{text-align:center;max-width:920px}
+.layout-overview .slide-heading{font-size:74px}
+.layout-overview .slide-list{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;max-width:920px}
+.layout-overview .slide-list li{margin:0;padding:18px 28px;border-color:#f5d866}
+.layout-overview .slide-list li:before{display:none}
+.layout-overview .progress:after{background:#f5d866}
+.layout-definition{background:#e2603f}
+.layout-definition[data-slide="06"]{background:#f5d866}
+.layout-definition[data-slide="08"]{background:#b89fcc}
+.layout-definition .slide-content:before{content:"DEFINITION";display:inline-block;margin-bottom:34px;padding:11px 16px;background:#1a1817;color:#f8f4ee;border-radius:999px;font-family:var(--font-body);font-size:18px;font-weight:600;letter-spacing:.1em}
+.layout-definition .slide-heading{font-size:104px}
+.layout-examples{background:#1a1817;color:#f8f4ee}
+.layout-examples .slide-content{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+.layout-examples .slide-heading{grid-column:1/-1;font-size:72px;color:#f5d866}
+.layout-examples .slide-paragraph{padding:30px;border-top:4px solid #e2603f;font-size:29px}
+.layout-examples .slide-list{display:grid;grid-template-columns:1fr 1fr;gap:20px;grid-column:1/-1}
+.layout-examples .slide-list li{margin:0;border-color:#7ab7c8;border-radius:18px}
+.layout-examples .slide-list li:before{background:#e2603f}
+.layout-subcategories{background:#e2603f;text-align:center}
+.layout-subcategories .slide-content{max-width:920px}
+.layout-subcategories .slide-heading{font-size:70px}
+.layout-subcategories .slide-list{display:flex;flex-wrap:wrap;justify-content:center;gap:18px}
+.layout-subcategories .slide-list li{margin:0;padding:18px 28px;border:0;background:#f5d866}
+.layout-subcategories .slide-list li:nth-child(2n){background:#7ab7c8}
+.layout-subcategories .slide-list li:nth-child(3n){background:#a8d49e}
+.layout-subcategories .slide-list li:before{display:none}
+.layout-summary{background:#f5d866}
+.layout-summary .slide-heading{font-size:98px}
+.layout-summary .slide-paragraph{font-size:28px}
+.layout-summary .slide-content:before{content:"IN SHORT";display:block;margin-bottom:28px;font-family:var(--font-body);font-size:18px;letter-spacing:.16em}
+.layout-closer .slide-heading{font-size:96px}
+.layout-closer .pill{background:#1a1817;color:#f8f4ee;border-color:#1a1817}
+.layout-closer .progress:after{background:#1a1817}
+
+</style>
+</head>
+<body>
+<main class="slide layout-{{slide_layout}}" data-layout="{{slide_layout}}" data-slide="{{slide_number}}">
+  <header class="topline"><span class="pill">HOUSE EXPLAINS</span><span>HOUSE / EXPLAINER</span></header>
+  <section class="slide-content">{{slide_content}}</section>
+  <footer class="counter"><span>{{slide_number}} / {{slide_total}}</span><span class="progress" aria-hidden="true"></span></footer>
+</main>
+<div class="studio-asset-preloads" aria-hidden="true" style="position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.001;pointer-events:none">{{asset_preloads}}</div>
+</body>
+</html>

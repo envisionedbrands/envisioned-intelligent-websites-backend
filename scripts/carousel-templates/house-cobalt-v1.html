@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" data-carousel-contract="{{contract_version}}" data-template-id="{{template_id}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,height=1350">
+<style>
+{{font_faces}}
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1350px;overflow:hidden}
+body{background:#000;color:#fff;font-family:"Studio Inter Tight",sans-serif;-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1080px;height:1350px;padding:82px 78px;overflow:hidden;background:#000;display:flex;flex-direction:column}
+.slide:before{content:"";position:absolute;inset:0;background-color:#000;background-image:url("{{gradient_asset_1}}");background-size:cover;background-position:center;background-repeat:no-repeat}
+.slide:after{content:"";position:absolute;inset:0;opacity:.17;background-image:repeating-linear-gradient(90deg,transparent 0,transparent 119px,rgba(255,255,255,.15) 120px)}
+.chrome,.slide-content,.index{position:relative;z-index:1}
+.chrome{display:flex;justify-content:space-between;font-size:18px;letter-spacing:.18em;text-transform:uppercase;color:#6a6a70}
+.chrome strong{font-weight:600;color:#fff}
+.index{margin-top:auto;display:flex;justify-content:space-between;align-items:end;border-top:1px solid rgba(255,255,255,.36);padding-top:22px;font-size:18px;letter-spacing:.16em}
+.slide-content{width:100%;margin:auto 0;max-width:880px}
+.slide-heading{margin:0;font-size:78px;line-height:1.03;letter-spacing:-.035em;font-weight:400}
+.slide-paragraph{margin:32px 0 0;max-width:720px;font-size:32px;line-height:1.38;font-weight:400;color:#e8e8ec}
+.slide-list{margin:38px 0 0;padding:0;list-style:none;counter-reset:item;max-width:820px}
+.slide-list li{counter-increment:item;display:grid;grid-template-columns:74px 1fr;gap:18px;padding:22px 0;border-top:1px solid rgba(255,255,255,.3);font-size:29px;line-height:1.25}
+.slide-heading,.slide-paragraph,.slide-list,.slide-list li{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+.slide-list li:before{content:"(" counter(item,decimal-leading-zero) ")";font-size:16px;letter-spacing:.08em;color:#7591ff}
+.layout-cover .slide-content{max-width:900px}
+.layout-cover .slide-heading{font-size:102px;line-height:.96}
+.layout-cover:before{background-image:url("{{gradient_asset_1}}")}
+.layout-frame .slide-content{max-width:700px;margin-left:auto;padding:58px;border:1px solid rgba(255,255,255,.45)}
+.layout-frame .slide-heading{font-size:54px;line-height:1.12}
+.layout-frame:before{background-image:url("{{gradient_asset_2}}")}
+.layout-column .slide-content{margin-left:auto;width:560px;padding-left:44px;border-left:1px solid rgba(125,160,255,.7)}
+.layout-column .slide-heading{font-size:46px}
+.layout-column .slide-paragraph{font-size:29px;line-height:1.55;text-align:justify}
+.layout-column:before{background-image:url("{{gradient_asset_3}}");background-position:left center}
+.layout-statement .slide-content{max-width:920px;padding:54px 0;border-top:1px solid #1d4dff;border-bottom:1px solid #1d4dff}
+.layout-statement .slide-heading{font-size:88px;line-height:.98}
+.layout-statement .slide-paragraph{font-size:26px}
+.layout-statement:before{background-image:url("{{gradient_asset_2}}")}
+.layout-photo:before{inset:0;background-color:#111;background-image:url("{{photo_asset_1}}");background-size:cover;background-position:center;filter:grayscale(1) contrast(1.05) brightness(.85)}
+.layout-photo[data-slide="08"]:before{background-image:url("{{photo_asset_2}}");background-size:cover;background-position:center;filter:grayscale(1) contrast(1.05) brightness(.85)}
+.layout-photo:after{opacity:1;background:linear-gradient(0deg,rgba(0,0,0,.92),transparent 58%)}
+.layout-photo .slide-content{margin-top:auto;margin-bottom:46px;max-width:760px;padding:34px;background:rgba(0,0,0,.58);border-left:5px solid #1d4dff}
+.layout-photo .slide-heading{font-size:54px}
+.layout-photo .slide-paragraph{font-size:27px}
+.layout-service .slide-heading{font-size:52px}
+.layout-service .slide-list{max-width:900px}
+.layout-service .slide-list li{grid-template-columns:96px 1fr;padding:24px 0;font-size:27px}
+.layout-service .slide-list li:before{font-size:34px;font-weight:600;color:#1d4dff}
+.layout-service:before{background-image:url("{{gradient_asset_4}}")}
+.layout-blue_field{background:#1d4dff;color:#000}
+.layout-blue_field:before{display:none}
+.layout-blue_field:after{opacity:.24;background:repeating-linear-gradient(90deg,transparent 0,transparent 227px,#000 228px)}
+.layout-blue_field .chrome,.layout-blue_field .chrome strong,.layout-blue_field .slide-paragraph,.layout-blue_field .index,.layout-blue_field .accent{color:#000;border-color:rgba(0,0,0,.35)}
+.layout-blue_field .slide-content{display:grid;grid-template-columns:1fr 1fr;gap:60px;max-width:none;padding-top:42px;border-top:1px solid rgba(0,0,0,.35)}
+.layout-blue_field .slide-heading{font-size:64px}
+.layout-evidence .slide-content{max-width:900px}
+.layout-evidence .slide-heading{font-size:110px;line-height:.9;color:#fff}
+.layout-evidence .slide-paragraph{font-size:28px;max-width:620px;border-left:5px solid #1d4dff;padding-left:28px}
+.layout-evidence:before,.layout-closer:before{background-image:url("{{gradient_asset_1}}")}
+.layout-closer .slide-heading{font-size:82px}
+.layout-closer .slide-paragraph{font-size:30px}
+.layout-closer .index{border-color:#fff}
+.accent{color:#7da0ff}
+.studio-asset-preloads{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.001;pointer-events:none}.studio-asset-preloads img{display:block;width:1px;height:1px}
+
+</style>
+</head>
+<body>
+<main class="slide layout-{{slide_layout}}" data-layout="{{slide_layout}}" data-slide="{{slide_number}}">
+  <header class="chrome"><strong>FIELD NOTES</strong><span>[ HOUSE · COBALT ]</span></header>
+  <section class="slide-content">{{slide_content}}</section>
+  <footer class="index"><span class="accent">[ {{slide_number}} / {{slide_total}} ]</span><span>STUDIO EDITION</span></footer>
+</main>
+<div class="studio-asset-preloads" aria-hidden="true" style="position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.001;pointer-events:none">{{asset_preloads}}</div>
+</body>
+</html>

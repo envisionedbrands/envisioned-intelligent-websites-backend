@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-carousel-contract="{{contract_version}}" data-template-id="{{template_id}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1080,height=1350">
+<style>
+{{font_faces}}
+:root{--font-display:"Studio Fraunces",serif;--font-body:"Studio Inter",sans-serif;--font-mono:"Studio JetBrains Mono",monospace}
+*{box-sizing:border-box}
+html,body{margin:0;width:1080px;height:1350px;overflow:hidden}
+body{background:#f5f1ea;color:#211e1b;font-family:var(--font-display);-webkit-font-smoothing:antialiased}
+.slide{position:relative;width:1080px;height:1350px;padding:78px 84px 72px;background:#f5f1ea;overflow:hidden;display:flex;flex-direction:column}
+.masthead,.folio,.slide-content{position:relative}
+.masthead{display:flex;align-items:center;justify-content:space-between;border-top:7px solid #211e1b;border-bottom:1px solid #211e1b;padding:18px 0 16px;font-family:var(--font-body);font-size:16px;letter-spacing:.15em;text-transform:uppercase}
+.masthead strong{font-size:21px;letter-spacing:.08em}
+.slide-content{margin:auto 0;max-width:860px}
+.slide-heading{margin:0;font-family:var(--font-display);font-size:94px;line-height:.98;letter-spacing:-.045em;font-weight:400}
+.slide-paragraph{max-width:700px;margin:36px 0 0;font-family:var(--font-body);font-size:30px;line-height:1.5;color:#45403b}
+.slide-list{margin:40px 0 0;padding:0;list-style:none;counter-reset:item;max-width:800px}
+.slide-list li{counter-increment:item;display:grid;grid-template-columns:62px 1fr;gap:22px;padding:22px 0;border-top:1px solid #bdb3a6;font-family:var(--font-body);font-size:28px;line-height:1.3}
+.slide-heading,.slide-paragraph,.slide-list,.slide-list li{min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+.slide-list li:before{content:counter(item,decimal-leading-zero);font-family:var(--font-mono);color:#9b3d2e;font-size:18px}
+.folio{margin-top:auto;display:flex;justify-content:space-between;border-top:1px solid #211e1b;padding-top:18px;font-family:var(--font-mono);font-size:15px;letter-spacing:.09em}
+.layout-cover .slide-content{margin-top:120px}
+.layout-cover .slide-heading{font-size:128px;line-height:.89;font-weight:500}
+.layout-cover .slide-paragraph{font-size:24px;text-transform:uppercase;letter-spacing:.11em;color:#9b3d2e}
+.layout-hook .slide-heading{font-size:112px}
+.layout-hook .slide-heading:after{content:"";display:block;width:140px;border-bottom:8px solid #9b3d2e;margin-top:42px}
+.layout-body .slide-content{padding-left:44px;border-left:1px solid #c9c0ae}
+.layout-body .slide-heading{font-size:62px}
+.layout-body .slide-paragraph{font-size:32px}
+.layout-quote{background:#ede7da}
+.layout-quote .slide-content:before{content:"“";position:absolute;left:-16px;top:-150px;font-family:var(--font-display);font-size:250px;line-height:1;color:#9b3d2e;opacity:.9}
+.layout-quote .slide-heading{font-size:82px;font-weight:300;font-style:italic}
+.layout-list .slide-heading{font-size:68px}
+.layout-list .slide-list{border-bottom:1px solid #bdb3a6}
+.layout-closer{background:#211e1b;color:#f5f1ea}
+.layout-closer .masthead,.layout-closer .folio{border-color:#f5f1ea}
+.layout-closer .slide-paragraph{color:#d9d0c5}
+.layout-closer .slide-heading{font-size:96px}
+.accent{color:#9b3d2e}
+
+</style>
+</head>
+<body>
+<main class="slide layout-{{slide_layout}}" data-layout="{{slide_layout}}" data-slide="{{slide_number}}">
+  <header class="masthead"><strong>The Editorial Review</strong><span>House / Editorial</span></header>
+  <section class="slide-content">{{slide_content}}</section>
+  <footer class="folio"><span>ISSUE 01 · STUDIO</span><span class="accent">{{slide_number}} / {{slide_total}}</span></footer>
+</main>
+<div class="studio-asset-preloads" aria-hidden="true" style="position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:.001;pointer-events:none">{{asset_preloads}}</div>
+</body>
+</html>
