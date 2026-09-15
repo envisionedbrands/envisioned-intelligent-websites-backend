@@ -771,7 +771,7 @@ async function fetchVideo(url, dir, jobId, signal) {
   try {
     await ytdlp([
       "--skip-download", "--no-playlist",
-      "--write-subs", "--write-auto-subs", "--sub-langs", "en.*", "--sub-format", "vtt",
+      "--write-subs", "--write-auto-subs", "--sub-langs", "en,en-US,en-GB,en-orig", "--sub-format", "vtt",
       "-o", join(dir, "cap"), url,
     ], 180_000, signal);
     const vttFile = readdirSync(dir).find((f) => f.startsWith("cap") && f.endsWith(".vtt"));
