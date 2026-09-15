@@ -216,3 +216,23 @@ explicitly captured, verified id — never a position in a list.
 
 One test draft ("agent fire test 2", gray clip) left in the calendar
 deliberately — flagged for MI rather than deleted.
+
+## 2026-09-15 (later) — the wrongly deleted post RESTORED; bridge hardened on a real video
+
+Restored social_posts 2bba7d36 ("The Privilage of Refusing AI") under its
+ORIGINAL id from Meta's own record: caption (1,217 chars), full-res
+1080x1350 image re-uploaded to R2, and all three published targets with
+their real external ids/permalinks (FB Envisioned Brands, FB Brand
+Strategist+Photographer, IG). Note: it published everywhere as a SINGLE
+image — the [carousel] type had one media row, so nothing multi-slide was
+ever lost. Media URL verified 200.
+
+MI's first real video went through the bridge end to end and surfaced two
+hardening fixes (committed): Drive placeholder hydration probe in the
+watcher, and per-part 5xx retry in social-post.mjs (her 293MB upload had
+failed on a transient 503 mid-multipart).
+
+Per-account captions: schema + publisher already support
+social_post_targets.caption_override; NO UI writes it yet. MI declined the
+editor field for now ("no it's ok") — revisit if she asks for per-platform
+copy.
