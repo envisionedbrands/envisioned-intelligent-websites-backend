@@ -153,3 +153,41 @@ with 359 leads in the CRM, when Simon (Digital Home Manager) picked it up.
 - GitHub: authenticated (`envisionedbrands` account, `repo` + `workflow` scopes).
 - Supabase: `.env.local` on this machine holds the service role key (not
   copied here). Confirmed working via live queries during today's session.
+
+## 2026-09-15 — Content Studio 1.6.8.1 installed, deployed and proven
+
+Signed release verified independently (signature against the pinned vendor
+key, bundle hash, all 152 file hashes; byte-identical to Simon's /tmp copy).
+16 Studio migrations applied transactionally via the Management API to
+aqylffhuzunpimrebgye on MI's explicit yes; studio_167_schema_contract
+ready=true. Migration ledger repaired with her approval: the 17 pre-existing
+hand-applied versions plus the 16 Studio ones recorded (34 rows; pre-repair
+snapshot retained in session scratch). Existing systems verified untouched
+before and after: leads, bookings, DM funnels, map tables, custom Operator +
+Carousels, workflows, all three live sites.
+
+Four controlled merges (types/sidebar/middleware/build) — nothing existing
+overwritten. tiptap reconciled: release pinned @tiptap/markdown 3.22.5;
+repo's locked suite is 3.29.2, installed markdown at 3.29.2 to protect the
+working article editor (tsc + build prove it). wrangler placement pinned
+aws:eu-west-1. Runner supervised via launchd, all lanes green, Anthropic
+valid on Worker AND runner. fal lane optional, not connected (image
+generation only).
+
+Proofs all passed: sidebar navigation, logged-out boundary, static
+workspace, 5 hard refreshes, board separation, failed-load Retry recovery,
+own articles mirrored, real ingest (TED talk, transcript+analysis), desk
+reply quoting verbatim source facts, desk auto-rename, all persisted in DB.
+
+**Deliberate one-line divergence from the signed payload:** the shipped
+runner passed yt-dlp --sub-langs "en.*", which enumerates dozens of
+auto-TRANSLATED tracks and triggers YouTube 429 before plain English is
+fetched — every captioned video failed as "captionless". Patched to
+"en,en-US,en-GB,en-orig" (commit 463368d). FLAG UPSTREAM to BraveBrand;
+a future signed upgrade may replace this file.
+
+Open: Bob (Content Manager) owns first-use + the one-time HOUSE carousel
+look choice ("Carousel setup needs attention" until chosen). One failed
+test card (Jobs video) left on the "Install proof A" board — its Retry will
+succeed once YouTube's subtitle rate-limit clears. Broadcast-approval and
+carousel-queue freezes from the install window are LIFTED.
