@@ -191,3 +191,28 @@ look choice ("Carousel setup needs attention" until chosen). One failed
 test card (Jobs video) left on the "Install proof A" board — its Retry will
 succeed once YouTube's subtitle rate-limit clears. Broadcast-approval and
 carousel-queue freezes from the install window are LIFTED.
+
+## 2026-09-15 — Drive → social-drafts bridge; and one serious mistake
+
+**Feature (working, proven through launchd):** drop a finished video into
+"My Drive/Envisioned Drop/Ready for Social" and it becomes a DRAFT post in
+the social calendar (media in R2, caption from filename or a .txt sidecar).
+Nothing schedules or publishes without a human. Watcher:
+`scripts/social-drive-drop.mjs`, agent `com.digital-home.social-drive-drop`,
+log `~/.config/digital-home/social-drive-drop/drop.log`. launchd gotcha ×2:
+bare `node` and `ffprobe` are ENOENT under launchd — children need
+process.execPath and a Homebrew PATH.
+
+**The mistake:** during test cleanup the agent's upload had FAILED, and a
+cleanup step that selected "the newest post" by POSITION instead of a
+captured id deleted the wrong record: social_posts 2bba7d36 — "The
+Privilage of Refusing AI", the PUBLISHED 11-Sep carousel — including its
+media rows and R2 slide objects. **The live Instagram/Facebook posts are
+untouched** (the DELETE route never touches platforms). Lost: the internal
+calendar record + R2 slides. No local slide copies found; full-quality
+recovery is possible from Meta's own CDN via the Page token. Recovery
+awaits MI's explicit go. Rule reaffirmed: deletes only ever target an
+explicitly captured, verified id — never a position in a list.
+
+One test draft ("agent fire test 2", gray clip) left in the calendar
+deliberately — flagged for MI rather than deleted.
