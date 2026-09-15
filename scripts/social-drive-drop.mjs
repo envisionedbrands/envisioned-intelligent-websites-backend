@@ -22,7 +22,7 @@
  * a daemon. A lock file makes overlapping triggers exit early.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,6 +54,25 @@ const fileKey = (p, st) => `${basename(p)}:${st.size}:${Math.floor(st.mtimeMs)}`
 const pretty = (name) =>
   name.replace(extname(name), '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 
+/**
+ * Drive for desktop lists placeholder files at full logical size while the
+ * bytes are still in the cloud; reading one fails with EDEADLK ("Resource
+ * deadlock avoided"). Size stability therefore proves nothing. This probe
+ * reads the first and last megabyte — a failure means "still downloading",
+ * and the attempted read itself asks File Provider to start hydrating.
+ */
+function isReadable(p, size) {
+  const buf = Buffer.alloc(1024 * 1024);
+  let fd;
+  try {
+    fd = openSync(p, 'r');
+    readSync(fd, buf, 0, Math.min(buf.length, size), 0);
+    if (size > buf.length) readSync(fd, buf, 0, buf.length, size - buf.length);
+    return true;
+  } catch { return false; }
+  finally { if (fd !== undefined) try { closeSync(fd); } catch {} }
+}
+
 try {
   const candidates = readdirSync(DROP)
     .filter((f) => !f.startsWith('.') && EXT.has(extname(f).toLowerCase()))
@@ -72,6 +91,10 @@ try {
       if (st.size !== before.get(p)) { log(`still syncing, skipped: ${name}`); continue; }
       const key = fileKey(p, st);
       if (attempted[key]) continue; // failed before and unchanged since
+      if (!isReadable(p, st.size)) {
+        log(`still downloading from Drive, will retry: ${name}`);
+        continue; // not marked attempted — next cycle tries again
+      }
 
       const sidecar = join(DROP, name.replace(extname(name), '') + '.txt');
       const caption = existsSync(sidecar) ? readFileSync(sidecar, 'utf8').trim() : pretty(name);
@@ -87,6 +110,8 @@ try {
         rmSync(join(DROP, name + '.upload-error.txt'), { force: true });
         log(`uploaded as draft: ${name}`);
       } catch (e) {
+        const transient = /deadlock|EDEADLK/i.test(String(e.stdout || '') + String(e.stderr || '') + e.message);
+        if (transient) { log(`Drive still syncing mid-upload, will retry: ${name}`); continue; }
         attempted[key] = new Date().toISOString();
         const detail = [e.stdout, e.stderr].map((b) => (b ? String(b) : '')).join('\n').slice(-1500);
         writeFileSync(join(DROP, name + '.upload-error.txt'),

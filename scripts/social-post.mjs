@@ -215,13 +215,23 @@ async function uploadFile(filePath) {
       expiry: String(init.expiry),
       token: init.token,
     });
-    const res = await fetch(`${BASE}/api/social/upload/part?${params}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream', 'User-Agent': UA },
-      body: chunk,
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(`Part ${part} of ${basename(filePath)} failed: ${json.error || res.status}`);
+    // A 40MB part can hit a transient Worker 503; parts are idempotent, so a
+    // bounded retry beats failing the whole file and re-encoding it.
+    let res, json;
+    for (let attempt = 1; ; attempt++) {
+      res = await fetch(`${BASE}/api/social/upload/part?${params}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream', 'User-Agent': UA },
+        body: chunk,
+      }).catch((e) => ({ ok: false, status: `network: ${e.message}`, json: async () => ({}) }));
+      json = await res.json().catch(() => ({}));
+      if (res.ok) break;
+      const transient = res.status === 503 || res.status === 502 || res.status === 429 || String(res.status).startsWith('network');
+      if (!transient || attempt >= 4) throw new Error(`Part ${part} of ${basename(filePath)} failed: ${json.error || res.status}`);
+      const wait = attempt * 3000;
+      console.log(`  part ${part} got ${res.status} — retry ${attempt}/3 in ${wait / 1000}s`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
     parts.push({ part, etag: json.etag });
     if (offset + init.partSize >= size) break;
   }
