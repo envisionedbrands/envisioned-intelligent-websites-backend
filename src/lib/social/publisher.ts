@@ -561,5 +561,18 @@ export async function runSocialTick(
     summary.errors.push(`metrics: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // Native-post import: record posts made directly in the IG/FB apps so the
+  // calendar stays the one honest picture. Guarded — a Meta hiccup here can
+  // never affect publishing above.
+  try {
+    const { importNativePosts } = await import("./native-import");
+    const native = await importNativePosts(supabase);
+    if (native.imported > 0 || native.errors.length > 0) {
+      console.log("native-import", JSON.stringify(native));
+    }
+  } catch (e) {
+    console.error("native-import failed", e instanceof Error ? e.message : e);
+  }
+
   return summary;
 }
