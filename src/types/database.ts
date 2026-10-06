@@ -1974,6 +1974,7 @@ export type Database = {
           is_public: boolean;
           is_active: boolean;
           sort_order: number;
+          week_of_month_rule: "first_last" | null;
           created_at: string;
           updated_at: string;
         };
@@ -1996,6 +1997,7 @@ export type Database = {
           is_public?: boolean;
           is_active?: boolean;
           sort_order?: number;
+          week_of_month_rule?: "first_last" | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -2017,6 +2019,7 @@ export type Database = {
           is_public?: boolean;
           is_active?: boolean;
           sort_order?: number;
+          week_of_month_rule?: "first_last" | null;
           updated_at?: string;
         };
         Relationships: [];

@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
       location_kind: t.location_kind,
       is_public: t.is_public,
       is_active: t.is_active,
+      week_of_month_rule: t.week_of_month_rule,
       availability: human,
       booking_url: `/book/${t.slug}`,
       next_slots,

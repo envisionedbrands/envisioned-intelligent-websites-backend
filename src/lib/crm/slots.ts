@@ -22,6 +22,8 @@ export type EventType = {
   max_per_day: number | null;
   max_per_month: number | null;
   is_active: boolean;
+  /** `first_last` restricts offered days to the month's first 7 and last 7 days. */
+  week_of_month_rule?: "first_last" | null;
 };
 
 export type AvailabilityRule = {
@@ -92,6 +94,13 @@ function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number) {
   return aStart < bEnd && bStart < aEnd;
 }
 
+/** Days 1–7 or the last 7 days of the month, by the owner's calendar date. */
+function isFirstOrLastWeek(z: { y: number; m: number; d: number }): boolean {
+  if (z.d <= 7) return true;
+  const daysInMonth = new Date(Date.UTC(z.y, z.m, 0)).getUTCDate();
+  return z.d > daysInMonth - 7;
+}
+
 export type SlotOptions = {
   eventType: EventType;
   availability: AvailabilityRule[];
@@ -155,6 +164,7 @@ export function generateSlots(opts: SlotOptions): string[] {
   for (let dayOffset = 0; dayOffset <= windowDays; dayOffset++) {
     const probe = new Date(start.getTime() + dayOffset * 86400000);
     const z = zoned(probe, timeZone);
+    if (et.week_of_month_rule === "first_last" && !isFirstOrLastWeek(z)) continue;
     const rules = byDow.get(z.dow);
     if (!rules) continue;
 
