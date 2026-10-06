@@ -64,11 +64,14 @@ export async function importNativePosts(supabase: AdminClient): Promise<ImportSu
           continue;
         }
         // The unique index on external_id makes concurrent ticks race-proof:
-        // the loser's upsert inserts nothing, and its post row is removed so
-        // no orphan can ever duplicate on a later run.
+        // the loser's insert is refused (23505) and its post row is removed so
+        // no orphan can ever duplicate on a later run. Plain insert, NOT an
+        // upsert: the live index (social_post_targets_external_id_uniq) is
+        // partial, and ON CONFLICT (external_id) can't match a partial index,
+        // so every upsert failed with 42P10 — proven 2026-10-04.
         const { data: target, error: targetError } = await supabase
           .from("social_post_targets")
-          .upsert(
+          .insert(
             {
               post_id: post.id,
               account_id: acc.id,
@@ -77,13 +80,12 @@ export async function importNativePosts(supabase: AdminClient): Promise<ImportSu
               external_id: item.externalId,
               external_url: item.permalink,
               published_at: item.publishedAt,
-            },
-            { onConflict: "external_id", ignoreDuplicates: true }
-          )
+            })
           .select("id");
         if (targetError || !target?.length) {
           await supabase.from("social_posts").delete().eq("id", post.id).eq("created_by", "native-import");
-          if (targetError) summary.errors.push(`target ${item.externalId}: ${targetError.message}`);
+          // 23505 = another tick recorded it first: expected, not an error.
+          if (targetError && targetError.code !== "23505") summary.errors.push(`target ${item.externalId}: ${targetError.message}`);
           continue;
         }
         known.add(item.externalId);
