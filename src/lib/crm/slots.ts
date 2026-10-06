@@ -175,22 +175,43 @@ export function generateSlots(opts: SlotOptions): string[] {
     for (const rule of rules) {
       // Step by duration + gap: the grid itself enforces the breathing room.
       const step = et.duration_minutes + et.gap_minutes;
-      for (let mins = rule.start_minute; mins + et.duration_minutes <= rule.end_minute; mins += step) {
+      let lastOffered: number | null = null;
+
+      const tryOffer = (mins: number) => {
         const slotStart = instantFor(z.y, z.m, z.d, mins, timeZone);
         const s = slotStart.getTime();
         const e = s + durationMs;
 
-        if (s < earliest) continue;
-        if (blocked.some((b) => overlaps(s, e, b.start, b.end))) continue;
+        if (s < earliest) return;
+        if (blocked.some((b) => overlaps(s, e, b.start, b.end))) return;
 
         const dayTotal = bookedToday + (dayCount.get(z.dateKey) || 0);
-        if (et.max_per_day != null && dayTotal >= et.max_per_day) continue;
+        if (et.max_per_day != null && dayTotal >= et.max_per_day) return;
         const monthTotal = bookedMonth + (monthCount.get(monthKey) || 0);
-        if (et.max_per_month != null && monthTotal >= et.max_per_month) continue;
+        if (et.max_per_month != null && monthTotal >= et.max_per_month) return;
 
         out.push(slotStart.toISOString());
         // Caps describe how many can be BOOKED, not how many are offered —
         // so we don't increment here; the counts above reflect real bookings.
+      };
+
+      for (let mins = rule.start_minute; mins + et.duration_minutes <= rule.end_minute; mins += step) {
+        tryOffer(mins);
+        lastOffered = mins;
+      }
+
+      // The uniform step strands time at the window's hard stop whenever
+      // (end - start) isn't an exact multiple of (duration + gap) — e.g. a
+      // 10:30-17:30 day of 30-min calls with a 15-min gap steps 10:30, 11:15,
+      // … 16:30, then overshoots 17:30 on the next tick, even though 17:00
+      // is a perfectly good last start. Recover that one slot whenever it
+      // doesn't overlap the slot already offered before it.
+      const finalStart = rule.end_minute - et.duration_minutes;
+      if (
+        finalStart >= rule.start_minute &&
+        (lastOffered === null || finalStart >= lastOffered + et.duration_minutes)
+      ) {
+        tryOffer(finalStart);
       }
     }
   }
