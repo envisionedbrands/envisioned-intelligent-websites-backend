@@ -16,7 +16,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { sendCrmEmail } from "./email";
+import { notifyOwner, sendCrmEmail } from "./email";
 import type { CrmSettings } from "./types";
 
 type AdminClient = SupabaseClient<Database>;
@@ -25,6 +25,8 @@ type Lead = Database["public"]["Tables"]["leads"]["Row"];
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
+/** How long after booking the confirmation may still go out. */
+const CONFIRMATION_WINDOW = 6 * HOUR;
 
 type StepKey = "confirmation" | "reminder_24h" | "reminder_12h" | "reminder_1h" | "reminder_5min" | "thank_you";
 
@@ -49,8 +51,8 @@ const STEPS: Step[] = [
     // Only just after the booking was made. Without the created_at guard this
     // fires for ANY future booking the moment the sequence is switched on —
     // which sent a "you are penciled in" three days after the fact (2026-08-16).
-    due: (ms, appt) => ms > 0 && ageMs(appt) <= 6 * HOUR,
-    missed: (ms, appt) => ms < 0 || ageMs(appt) > 6 * HOUR,
+    due: (ms, appt) => ms > 0 && ageMs(appt) <= CONFIRMATION_WINDOW,
+    missed: (ms, appt) => ms < 0 || ageMs(appt) > CONFIRMATION_WINDOW,
   },
   {
     key: "reminder_24h",
@@ -120,12 +122,32 @@ function ageMs(appt: Appointment): number {
   return created ? Date.now() - created : 0;
 }
 
+/**
+ * "New booking" notice to her own inbox. Fires with the confirmation step, so
+ * she hears about every booking even when the guest's email stands down.
+ * notifyOwner never throws.
+ */
+async function notifyNewBooking(supabase: AdminClient, appt: Appointment, lead: Lead) {
+  const v = fmt(appt, lead, appt.timezone || "Europe/Amsterdam");
+  const who = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email;
+  await notifyOwner(
+    supabase,
+    `New booking: ${who}, ${v.booking_day} at ${v.booking_time}`,
+    `**${appt.title || "A call"}**\n\n` +
+      `**When:** ${v.booking_day} at ${v.booking_time} (${v.timezone})\n\n` +
+      `**Who:** ${who} (${lead.email})\n\n` +
+      `**Their note:** ${appt.guest_notes?.trim() || "none"}`
+  );
+}
+
 export type SequenceSummary = { sent: number; simulated: number; skipped: number; errors: string[] };
 
-function fmt(appt: Appointment, lead: Lead) {
-  const tz = appt.guest_timezone || appt.timezone || "Europe/Amsterdam";
+/** Guest-facing by default; pass the owner's zone for her own notices. */
+function fmt(appt: Appointment, lead: Lead, zone?: string) {
+  const tz = zone || appt.guest_timezone || appt.timezone || "Europe/Amsterdam";
   const start = new Date(appt.starts_at);
   return {
+    timezone: tz,
     booking_title: appt.title || "our call",
     booking_day: start.toLocaleDateString("en-GB", {
       timeZone: tz,
@@ -178,13 +200,19 @@ export async function runBookingSequence(
   const quietMs = (typeof qw?.value === "number" ? qw.value : 8) * HOUR;
 
   const now = Date.now();
-  // Everything from a day and a half ago (thank-yous) to a week ahead.
+  // Everything from a day and a half ago (thank-yous) to a week ahead, plus
+  // anything booked inside the confirmation window however far out it starts.
+  // Without the second branch a booking more than a week away was never seen
+  // while its confirmation was due, then got stamped "missed" once it came into
+  // range — so nobody booking two weeks out was ever confirmed (2026-10-13).
   const { data: appts, error } = await supabase
     .from("appointments")
     .select("*")
     .eq("status", "scheduled")
-    .gte("starts_at", new Date(now - 48 * HOUR).toISOString())
-    .lte("starts_at", new Date(now + 7 * 24 * HOUR).toISOString());
+    .or(
+      `and(starts_at.gte.${new Date(now - 48 * HOUR).toISOString()},starts_at.lte.${new Date(now + 7 * 24 * HOUR).toISOString()}),` +
+        `created_at.gte.${new Date(now - CONFIRMATION_WINDOW).toISOString()}`
+    );
   if (error) {
     summary.errors.push(`fetch appointments: ${error.message}`);
     return summary;
@@ -221,23 +249,6 @@ export async function runBookingSequence(
       }
       if (!step.due(msUntil, appt)) continue;
 
-      // The collision guard — nurture steps stand down, utility steps don't.
-      if (step.yields) {
-        const { count } = await supabase
-          .from("email_sends")
-          .select("id", { count: "exact", head: true })
-          .eq("lead_id", lead.id)
-          .gte("created_at", new Date(now - quietMs).toISOString());
-        if ((count || 0) > 0) {
-          await supabase
-            .from("appointments")
-            .update({ [step.column]: new Date().toISOString() })
-            .eq("id", appt.id);
-          summary.skipped++;
-          continue;
-        }
-      }
-
       // Claim the step atomically. The cron tick and a manual tick can overlap;
       // on 2026-08-16 that put a confirmation and a 1h reminder in the same
       // inbox one second apart. Whoever wins the conditional update sends.
@@ -248,6 +259,21 @@ export async function runBookingSequence(
         .is(step.column, null)
         .select("id");
       if (!claimed?.length) continue; // another tick got there first
+
+      // The collision guard — nurture steps stand down, utility steps don't.
+      // The claim above already stamped the step, so standing down is final.
+      if (step.yields) {
+        const { count } = await supabase
+          .from("email_sends")
+          .select("id", { count: "exact", head: true })
+          .eq("lead_id", lead.id)
+          .gte("created_at", new Date(now - quietMs).toISOString());
+        if ((count || 0) > 0) {
+          if (step.key === "confirmation") await notifyNewBooking(supabase, appt, lead);
+          summary.skipped++;
+          continue;
+        }
+      }
 
       const tpl = tplByName.get(step.template);
       const fb = FALLBACK[step.template];
@@ -277,6 +303,8 @@ export async function runBookingSequence(
           summary.errors.push(`${lead.email} (${step.key}): ${result.error}`);
           continue;
         }
+        // Told once the guest's email is settled, never on a retried failure.
+        if (step.key === "confirmation") await notifyNewBooking(supabase, appt, lead);
         if (result.status === "sent") summary.sent++;
         if (result.status === "simulated") summary.simulated++;
       } catch (e) {
