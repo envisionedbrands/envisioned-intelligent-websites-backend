@@ -125,20 +125,42 @@ function ageMs(appt: Appointment): number {
 /**
  * "New booking" notice to her own inbox. Fires with the confirmation step, so
  * she hears about every booking even when the guest's email stands down.
- * notifyOwner never throws.
+ *
+ * Safe mode does not hold this back: like the pipeline alerts (health.ts,
+ * alerts.ts) it goes only to the owner address, never to a lead, so a real
+ * booking still reaches her while guest emails are simulated.
+ *
+ * A refusal or throw comes back as an error string for the tick summary.
+ * The step is not released for it: the guest's email is already settled and
+ * must not repeat just to retry her notice.
  */
-async function notifyNewBooking(supabase: AdminClient, appt: Appointment, lead: Lead) {
-  const v = fmt(appt, lead, appt.timezone || "Europe/Amsterdam");
-  const who = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email;
-  await notifyOwner(
-    supabase,
-    `New booking: ${who}, ${v.booking_day} at ${v.booking_time}`,
-    `**${appt.title || "A call"}**\n\n` +
-      `**When:** ${v.booking_day} at ${v.booking_time} (${v.timezone})\n\n` +
-      `**Who:** ${who} (${lead.email})\n\n` +
-      `**Their note:** ${appt.guest_notes?.trim() || "none"}`
-  );
+async function notifyNewBooking(
+  notify: typeof notifyOwner,
+  supabase: AdminClient,
+  appt: Appointment,
+  lead: Lead
+): Promise<string | null> {
+  try {
+    const v = fmt(appt, lead, appt.timezone || "Europe/Amsterdam");
+    const who = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email;
+    const result = await notify(
+      supabase,
+      `New booking: ${who}, ${v.booking_day} at ${v.booking_time}`,
+      `**${appt.title || "A call"}**\n\n` +
+        `**When:** ${v.booking_day} at ${v.booking_time} (${v.timezone})\n\n` +
+        `**Who:** ${who} (${lead.email})\n\n` +
+        `**Their note:** ${appt.guest_notes?.trim() || "none"}`
+    );
+    return result.sent ? null : `${lead.email} (owner notice): ${result.error || "not sent"}`;
+  } catch (e) {
+    // Never let the notice reach the send's catch: that would release a
+    // settled step and repeat the guest's email.
+    return `${lead.email} (owner notice): ${e instanceof Error ? e.message : "notify error"}`;
+  }
 }
+
+/** Email senders, swappable so the sequence can be tested without a network. */
+export type SequenceDeps = { sendCrmEmail: typeof sendCrmEmail; notifyOwner: typeof notifyOwner };
 
 export type SequenceSummary = { sent: number; simulated: number; skipped: number; errors: string[] };
 
@@ -181,7 +203,8 @@ function render(text: string, values: Record<string, string>): string {
 
 export async function runBookingSequence(
   supabase: AdminClient,
-  settings: CrmSettings
+  settings: CrmSettings,
+  deps: SequenceDeps = { sendCrmEmail, notifyOwner }
 ): Promise<SequenceSummary> {
   const summary: SequenceSummary = { sent: 0, simulated: 0, skipped: 0, errors: [] };
 
@@ -269,7 +292,10 @@ export async function runBookingSequence(
           .eq("lead_id", lead.id)
           .gte("created_at", new Date(now - quietMs).toISOString());
         if ((count || 0) > 0) {
-          if (step.key === "confirmation") await notifyNewBooking(supabase, appt, lead);
+          if (step.key === "confirmation") {
+            const notifyError = await notifyNewBooking(deps.notifyOwner, supabase, appt, lead);
+            if (notifyError) summary.errors.push(notifyError);
+          }
           summary.skipped++;
           continue;
         }
@@ -282,7 +308,7 @@ export async function runBookingSequence(
       const values = fmt(appt, lead);
 
       try {
-        const result = await sendCrmEmail(
+        const result = await deps.sendCrmEmail(
           supabase,
           {
             lead,
@@ -304,7 +330,10 @@ export async function runBookingSequence(
           continue;
         }
         // Told once the guest's email is settled, never on a retried failure.
-        if (step.key === "confirmation") await notifyNewBooking(supabase, appt, lead);
+        if (step.key === "confirmation") {
+          const notifyError = await notifyNewBooking(deps.notifyOwner, supabase, appt, lead);
+          if (notifyError) summary.errors.push(notifyError);
+        }
         if (result.status === "sent") summary.sent++;
         if (result.status === "simulated") summary.simulated++;
       } catch (e) {
