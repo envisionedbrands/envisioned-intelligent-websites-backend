@@ -3,8 +3,10 @@
  * DELETE /api/crm/derivatives/:id
  *
  * Status moves draft → approved → scheduled → published. Approving is a
- * status change, NOT a send: nothing in this system posts to a platform by
- * itself, and that stays true until she asks for it explicitly.
+ * status change, NOT a send. The only path from a derivative to a platform is
+ * Substack Notes (asked for explicitly 2026-10-04): the owner schedules it via
+ * /api/social/substack/schedule or approves an agent's proposal, and the
+ * social tick sets `scheduled`/`published` here. This route never sends.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateSessionOrApiKey, unauthorizedResponse } from "@/lib/api/auth";

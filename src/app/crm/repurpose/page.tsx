@@ -8,6 +8,9 @@
  * in conversation and invisible in the product. This is that link, made usable.
  *
  * Everything generated is a DRAFT. Approving is a status change, not a send.
+ * The one exception is deliberate and explicit: on a Substack note, the owner
+ * can pick a time and press "Schedule on Substack". That click is her yes; the
+ * social tick then posts it (lib/social/substack.ts).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, EmptyState, GhostBtn, Loading, PageHeader, PrimaryBtn, useToast } from '@/components/crm/kit';
@@ -21,7 +24,21 @@ type Derivative = {
   cta: string | null;
   status: string;
   created_at: string;
+  scheduled_for: string | null;
+  external_url: string | null;
 };
+
+/** Tomorrow 09:00 in the browser's timezone, as a datetime-local value. */
+function defaultSlot(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const fmtWhen = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 const KIND_LABEL: Record<string, string> = {
   linkedin: 'LinkedIn',
@@ -42,6 +59,8 @@ export default function RepurposePage() {
   const [kinds, setKinds] = useState<string[]>(['linkedin', 'instagram', 'newsletter']);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slots, setSlots] = useState<Record<string, string>>({});
+  const [scheduling, setScheduling] = useState<string | null>(null);
 
   const loadArticles = useCallback(async () => {
     try {
@@ -99,6 +118,26 @@ export default function RepurposePage() {
       if (selected) await loadDerivatives(selected);
     } catch (e) {
       show(e instanceof Error ? e.message : 'Could not update');
+    }
+  }
+
+  async function scheduleNote(d: Derivative) {
+    const local = slots[d.id] || defaultSlot();
+    const when = new Date(local);
+    if (Number.isNaN(when.getTime())) return show('Pick a date and time');
+    if (!confirm(`Post this Note on Substack ${fmtWhen(when.toISOString())}?`)) return;
+    setScheduling(d.id);
+    try {
+      await api('/api/social/substack/schedule', {
+        method: 'POST',
+        body: JSON.stringify({ derivative_id: d.id, scheduled_at: when.toISOString() }),
+      });
+      show(`Scheduled for ${fmtWhen(when.toISOString())}`);
+      if (selected) await loadDerivatives(selected);
+    } catch (e) {
+      show(e instanceof Error ? e.message : 'Could not schedule');
+    } finally {
+      setScheduling(null);
     }
   }
 
@@ -216,6 +255,34 @@ export default function RepurposePage() {
                       <p className="mt-3 border-t border-white/[0.06] pt-3 text-[12px] text-zinc-500">
                         {d.cta}
                       </p>
+                    )}
+                    {d.kind === 'substack_note' && ['draft', 'approved'].includes(d.status) && (
+                      <div className="mt-4 flex items-center gap-2 border-t border-white/[0.06] pt-4">
+                        <input
+                          type="datetime-local"
+                          value={slots[d.id] || defaultSlot()}
+                          onChange={(e) => setSlots((cur) => ({ ...cur, [d.id]: e.target.value }))}
+                          className="border border-white/10 bg-transparent px-2 py-1 text-[12px] text-zinc-300"
+                        />
+                        <PrimaryBtn onClick={() => void scheduleNote(d)} disabled={scheduling === d.id}>
+                          {scheduling === d.id ? 'Scheduling…' : 'Schedule on Substack'}
+                        </PrimaryBtn>
+                      </div>
+                    )}
+                    {d.kind === 'substack_note' && d.status === 'scheduled' && d.scheduled_for && (
+                      <p className="mt-4 border-t border-white/[0.06] pt-4 text-[12px] text-zinc-500">
+                        Posts on Substack {fmtWhen(d.scheduled_for)}. To change it, cancel it in Social.
+                      </p>
+                    )}
+                    {d.status === 'published' && d.external_url && (
+                      <a
+                        href={d.external_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 block border-t border-white/[0.06] pt-4 text-[12px] text-zinc-400 underline"
+                      >
+                        View it live
+                      </a>
                     )}
                   </article>
                 ))}

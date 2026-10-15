@@ -15,6 +15,10 @@ export const CAROUSEL_PLATFORMS: SocialPlatform[] = ["instagram", "facebook"];
 
 export type SocialPlatform = SocialAccount["platform"];
 
+/** Platforms that take video Reels/Shorts and image posts through the composer.
+ *  Substack is text-only and is scheduled from Repurpose, never the composer. */
+export const MEDIA_PLATFORMS: SocialPlatform[] = ["instagram", "facebook", "youtube"];
+
 /** What a platform publish step reports back to the publisher engine. */
 export type PublishStep =
   | { state: "processing"; ref: Record<string, unknown> } // platform still ingesting; carry ref to next tick
@@ -36,4 +40,5 @@ export const PLATFORM_LABELS: Record<SocialPlatform, string> = {
   instagram: "Instagram Reels",
   facebook: "Facebook Reels",
   youtube: "YouTube Shorts",
+  substack: "Substack Notes",
 };

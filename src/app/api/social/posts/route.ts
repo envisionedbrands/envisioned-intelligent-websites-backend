@@ -10,6 +10,7 @@ import {
   CAROUSEL_MAX_SLIDES,
   CAROUSEL_MIN_SLIDES,
   CAROUSEL_PLATFORMS,
+  type SocialPlatform,
 } from "@/lib/social/types";
 
 export async function GET(request: NextRequest) {
@@ -117,7 +118,7 @@ export async function POST(request: NextRequest) {
 
   const supabase = createAdminClient();
 
-  let accounts: Array<{ id: string; platform: "instagram" | "facebook" | "youtube" }> = [];
+  let accounts: Array<{ id: string; platform: SocialPlatform }> = [];
   if (accountIds.length) {
     const { data, error } = await supabase
       .from("social_accounts")
@@ -128,6 +129,14 @@ export async function POST(request: NextRequest) {
     accounts = data || [];
     if (accounts.length !== accountIds.length) {
       return NextResponse.json({ error: "One or more accounts are not connected" }, { status: 400 });
+    }
+    // Notes are text-only and owner-gated: they're scheduled from Repurpose
+    // (/api/social/substack/schedule), never from the Reel/image composer.
+    if (accounts.some((a) => a.platform === "substack")) {
+      return NextResponse.json(
+        { error: "Substack Notes are scheduled from Repurpose, not the post composer — drop the Substack account" },
+        { status: 400 }
+      );
     }
     if (postType === "carousel") {
       const invalid = accounts.filter(

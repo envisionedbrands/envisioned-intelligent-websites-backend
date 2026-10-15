@@ -1084,7 +1084,7 @@ export type Database = {
         Row: {
           id: string;
           run_id: string | null;
-          type: "email" | "publish" | "workflow" | "dm_funnel" | "other";
+          type: "email" | "publish" | "workflow" | "dm_funnel" | "social_post" | "other";
           title: string;
           summary: string | null;
           payload: Json;
@@ -1097,7 +1097,7 @@ export type Database = {
         Insert: {
           id?: string;
           run_id?: string | null;
-          type: "email" | "publish" | "workflow" | "dm_funnel" | "other";
+          type: "email" | "publish" | "workflow" | "dm_funnel" | "social_post" | "other";
           title: string;
           summary?: string | null;
           payload?: Json;
@@ -1110,7 +1110,7 @@ export type Database = {
         Update: {
           id?: string;
           run_id?: string | null;
-          type?: "email" | "publish" | "workflow" | "dm_funnel" | "other";
+          type?: "email" | "publish" | "workflow" | "dm_funnel" | "social_post" | "other";
           title?: string;
           summary?: string | null;
           payload?: Json;
@@ -1125,7 +1125,7 @@ export type Database = {
       social_accounts: {
         Row: {
           id: string;
-          platform: "instagram" | "facebook" | "youtube";
+          platform: "instagram" | "facebook" | "youtube" | "substack";
           external_id: string;
           name: string;
           username: string | null;
@@ -1140,7 +1140,7 @@ export type Database = {
         };
         Insert: {
           id?: string;
-          platform: "instagram" | "facebook" | "youtube";
+          platform: "instagram" | "facebook" | "youtube" | "substack";
           external_id: string;
           name: string;
           username?: string | null;
@@ -1155,7 +1155,7 @@ export type Database = {
         };
         Update: {
           id?: string;
-          platform?: "instagram" | "facebook" | "youtube";
+          platform?: "instagram" | "facebook" | "youtube" | "substack";
           external_id?: string;
           name?: string;
           username?: string | null;
@@ -1178,9 +1178,10 @@ export type Database = {
           video_path: string | null;
           video_url: string | null;
           thumbnail_url: string | null;
-          post_type: "video" | "carousel";
+          post_type: "video" | "carousel" | "text";
           status: "draft" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "canceled";
           scheduled_at: string | null;
+          source_derivative_id: string | null;
           published_at: string | null;
           created_by: string;
           error: string | null;
@@ -1194,9 +1195,10 @@ export type Database = {
           video_path?: string | null;
           video_url?: string | null;
           thumbnail_url?: string | null;
-          post_type?: "video" | "carousel";
+          post_type?: "video" | "carousel" | "text";
           status?: "draft" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "canceled";
           scheduled_at?: string | null;
+          source_derivative_id?: string | null;
           published_at?: string | null;
           created_by?: string;
           error?: string | null;
@@ -1210,9 +1212,10 @@ export type Database = {
           video_path?: string | null;
           video_url?: string | null;
           thumbnail_url?: string | null;
-          post_type?: "video" | "carousel";
+          post_type?: "video" | "carousel" | "text";
           status?: "draft" | "scheduled" | "publishing" | "published" | "partial" | "failed" | "canceled";
           scheduled_at?: string | null;
+          source_derivative_id?: string | null;
           published_at?: string | null;
           created_by?: string;
           error?: string | null;
@@ -1264,7 +1267,7 @@ export type Database = {
           id: string;
           post_id: string;
           account_id: string;
-          platform: "instagram" | "facebook" | "youtube";
+          platform: "instagram" | "facebook" | "youtube" | "substack";
           status: "pending" | "publishing" | "processing" | "published" | "failed" | "skipped";
           caption_override: string | null;
           external_id: string | null;
@@ -1280,7 +1283,7 @@ export type Database = {
           id?: string;
           post_id: string;
           account_id: string;
-          platform: "instagram" | "facebook" | "youtube";
+          platform: "instagram" | "facebook" | "youtube" | "substack";
           status?: "pending" | "publishing" | "processing" | "published" | "failed" | "skipped";
           caption_override?: string | null;
           external_id?: string | null;
@@ -1296,7 +1299,7 @@ export type Database = {
           id?: string;
           post_id?: string;
           account_id?: string;
-          platform?: "instagram" | "facebook" | "youtube";
+          platform?: "instagram" | "facebook" | "youtube" | "substack";
           status?: "pending" | "publishing" | "processing" | "published" | "failed" | "skipped";
           caption_override?: string | null;
           external_id?: string | null;

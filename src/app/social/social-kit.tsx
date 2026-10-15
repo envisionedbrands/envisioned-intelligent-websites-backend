@@ -11,7 +11,11 @@ import type { ReactNode } from 'react';
 
 // ── client-side row shapes ───────────────────────────────────────────────────
 
-export type Platform = 'instagram' | 'facebook' | 'youtube';
+export type Platform = 'instagram' | 'facebook' | 'youtube' | 'substack';
+
+/** Platforms the Reel/image composer can target. Substack Notes are text-only
+ *  and owner-gated, scheduled from Repurpose instead. */
+export const COMPOSER_PLATFORMS: Platform[] = ['instagram', 'facebook', 'youtube'];
 
 export interface AccountRow {
   id: string;
@@ -68,7 +72,7 @@ export interface PostRow {
   id: string;
   title: string | null;
   caption: string;
-  post_type: 'video' | 'carousel';
+  post_type: 'video' | 'carousel' | 'text';
   video_path: string | null;
   video_url: string | null;
   status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'partial' | 'failed' | 'canceled';
@@ -89,6 +93,7 @@ export const PLATFORM_META: Record<
   instagram: { label: 'Instagram Reels', short: 'IG', dot: 'bg-fuchsia-400', hint: '≤3 min, 9:16' },
   facebook: { label: 'Facebook Reels', short: 'FB', dot: 'bg-blue-400', hint: '≤90 s, 9:16' },
   youtube: { label: 'YouTube Shorts', short: 'YT', dot: 'bg-red-400', hint: '≤3 min, 9:16' },
+  substack: { label: 'Substack Notes', short: 'SS', dot: 'bg-orange-400', hint: 'text Note' },
 };
 
 export const POST_STATUS_DOTS: Record<string, string> = {
@@ -158,8 +163,9 @@ export function PlatformBadge({ platform, muted }: { platform: Platform; muted?:
   );
 }
 
-export function PostTypeBadge({ type, slides }: { type: 'video' | 'carousel'; slides?: number }) {
-  const label = type === 'video' ? 'Reel' : (slides ?? 2) <= 1 ? 'Photo' : 'Carousel';
+export function PostTypeBadge({ type, slides }: { type: 'video' | 'carousel' | 'text'; slides?: number }) {
+  const label =
+    type === 'text' ? 'Note' : type === 'video' ? 'Reel' : (slides ?? 2) <= 1 ? 'Photo' : 'Carousel';
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-minimal-border text-[11px] font-medium text-zinc-400">
       {label}

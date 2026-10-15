@@ -3,7 +3,7 @@
 /**
  * Social performance — how the short-form engine is doing. Latest snapshot
  * per platform target, rolled up across the last 30 days, with a per-post
- * leaderboard underneath.
+ * leaderboard underneath, then Substack Notes ranked by subscribers driven.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -27,9 +27,25 @@ import {
 
 const WINDOW_DAYS = 30;
 
+interface NoteStat {
+  post_id: string;
+  url: string | null;
+  published_at: string | null;
+  excerpt: string;
+  impressions: number;
+  likes: number;
+  replies: number;
+  restacks: number;
+  link_clicks: number;
+  new_free_subscribers: number;
+  new_paid_subscribers: number;
+  sent_from: 'crm' | 'substack app';
+}
+
 export default function SocialPerformancePage() {
   const { show, node: toastNode } = useToast();
   const [posts, setPosts] = useState<PostRow[] | null>(null);
+  const [notes, setNotes] = useState<NoteStat[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [windowStart] = useState(() => Date.now() - WINDOW_DAYS * 86400000);
 
@@ -37,6 +53,10 @@ export default function SocialPerformancePage() {
     try {
       const { posts } = await api<{ posts: PostRow[] }>('/api/social/posts?limit=200');
       setPosts(posts);
+      // Substack is optional per install: no account, no section.
+      api<{ notes: NoteStat[] }>(`/api/social/substack/stats?days=${WINDOW_DAYS}&limit=50`)
+        .then((r) => setNotes(r.notes || []))
+        .catch(() => setNotes([]));
     } catch (e) {
       show(e instanceof Error ? e.message : 'Failed to load', 'err');
       setPosts([]);
@@ -80,6 +100,7 @@ export default function SocialPerformancePage() {
       instagram: { views: 0, posts: 0 },
       facebook: { views: 0, posts: 0 },
       youtube: { views: 0, posts: 0 },
+      substack: { views: 0, posts: 0 },
     };
     for (const p of published) {
       t.views += postMetric(p, 'views');
@@ -133,7 +154,9 @@ export default function SocialPerformancePage() {
 
         {/* per-platform */}
         <div className="grid grid-cols-3 gap-4 mb-10">
-          {(Object.keys(totals.perPlatform) as Platform[]).map((platform) => {
+          {(Object.keys(totals.perPlatform) as Platform[])
+            .filter((platform) => platform !== 'substack' || totals.perPlatform.substack.posts > 0)
+            .map((platform) => {
             const row = totals.perPlatform[platform];
             return (
               <div
@@ -222,6 +245,63 @@ export default function SocialPerformancePage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {/* Substack Notes: Substack's own per-Note attribution */}
+        {notes.length > 0 && (
+          <>
+            <h2 className="text-[13px] font-semibold text-zinc-300 mb-1">Substack Notes</h2>
+            <p className="text-[12px] text-zinc-500 mb-3">
+              Ranked by subscribers each Note brought in, from Substack&apos;s own Note stats. Young
+              Notes show impressions and subscribers after about a day.
+            </p>
+            <div className="border border-minimal-border rounded-xl overflow-hidden mb-12">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-minimal-border text-left text-[11px] uppercase tracking-wider text-zinc-500">
+                    <th className="px-4 py-2.5 font-semibold">Note</th>
+                    <th className="px-4 py-2.5 font-semibold">Posted</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">New subs</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">Impressions</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">Link clicks</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">Likes</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">Replies</th>
+                    <th className="px-4 py-2.5 font-semibold text-right">Restacks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {notes.map((n) => (
+                    <tr key={n.post_id} className="border-b border-minimal-border/60 last:border-0 hover:bg-minimal-row/50">
+                      <td className="px-4 py-3 text-white max-w-[360px]">
+                        {n.url ? (
+                          <a href={n.url} target="_blank" rel="noreferrer" className="block truncate hover:underline">
+                            {n.excerpt || 'Note'}
+                          </a>
+                        ) : (
+                          <span className="block truncate">{n.excerpt || 'Note'}</span>
+                        )}
+                        <span className="text-[11px] text-zinc-600">
+                          {n.sent_from === 'crm' ? 'sent from the CRM' : 'posted in Substack'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-zinc-500 whitespace-nowrap">{fmtDate(n.published_at)}</td>
+                      <td className="px-4 py-3 text-right text-white font-medium whitespace-nowrap">
+                        {n.new_free_subscribers + n.new_paid_subscribers}
+                        {n.new_paid_subscribers > 0 && (
+                          <span className="ml-1 text-[11px] text-zinc-500">({n.new_paid_subscribers} paid)</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{fmtCount(n.impressions)}</td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{fmtCount(n.link_clicks)}</td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{fmtCount(n.likes)}</td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{fmtCount(n.replies)}</td>
+                      <td className="px-4 py-3 text-right text-zinc-400">{fmtCount(n.restacks)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

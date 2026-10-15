@@ -102,6 +102,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
+  // Substack Notes: the words were approved by the owner, so only the owner
+  // (admin session) may change, re-time or re-arm one. Anyone else, agents
+  // included, may only cancel it. A Note keeps its single Substack target.
+  if (post.post_type === "text") {
+    const onlyCancel = body.status === "canceled" && Object.keys(body).every((k) => k === "status");
+    const isOwner = auth.mode === "session" && auth.role === "admin";
+    if (!isOwner && !onlyCancel) {
+      return NextResponse.json(
+        { error: "Only the owner can change a scheduled Substack Note. You can cancel it." },
+        { status: 403 }
+      );
+    }
+    if (Array.isArray(body.account_ids) || body.video_url !== undefined || Array.isArray(body.media)) {
+      return NextResponse.json({ error: "A Substack Note has text and a time only" }, { status: 400 });
+    }
+  }
+
   const update: Record<string, unknown> = {};
   if (body.title !== undefined) update.title = body.title?.trim() || null;
   if (body.caption !== undefined) update.caption = body.caption;
@@ -180,6 +197,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         );
       }
     }
+  } else if (post.post_type === "text") {
+    if (update.status === "scheduled" && !scheduledAt) {
+      return NextResponse.json({ error: "Scheduling a Note needs a time" }, { status: 400 });
+    }
   } else {
     const videoUrl = (update.video_url ?? post.video_url) as string | null;
     if (update.status === "scheduled" && (!scheduledAt || !videoUrl)) {
@@ -193,6 +214,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (Object.keys(update).length) {
     const { error } = await supabase.from("social_posts").update(update).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // A canceled Note hands its Repurpose draft back, so it can be re-timed.
+  if (post.post_type === "text" && update.status === "canceled" && post.source_derivative_id) {
+    await supabase
+      .from("content_derivatives")
+      .update({ status: "approved", scheduled_for: null, updated_at: new Date().toISOString() })
+      .eq("id", post.source_derivative_id)
+      .eq("status", "scheduled");
   }
 
   // Replace target set if provided (only touch untouched targets).
@@ -222,7 +252,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         .in("id", toAdd)
         .eq("status", "active");
       const eligible = (accounts || []).filter(
-        (a) => post.post_type !== "carousel" || CAROUSEL_PLATFORMS.includes(a.platform)
+        (a) =>
+          a.platform !== "substack" &&
+          (post.post_type !== "carousel" || CAROUSEL_PLATFORMS.includes(a.platform))
       );
       if (eligible.length) {
         await supabase.from("social_post_targets").insert(

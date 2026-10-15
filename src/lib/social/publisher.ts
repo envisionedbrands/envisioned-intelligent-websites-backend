@@ -1,7 +1,8 @@
 /**
- * The social publish engine. Idempotent — driven by the social-tick GitHub
- * Action every ~10 minutes, the "Publish now" button, or any authenticated
- * agent, mirroring the CRM engine's design.
+ * The social publish engine. Idempotent — driven by the Worker's 5-minute
+ * cron (worker.ts), the "Publish now" button, or any authenticated agent,
+ * mirroring the CRM engine's design. Substack Notes (post_type 'text') ride
+ * the same lifecycle but publish in a single step.
  *
  * Lifecycle: a post goes scheduled → publishing when due; each target then
  * walks pending → (processing) → published/failed. Meta ingests async, so a
@@ -29,6 +30,7 @@ import {
   ytStartVideoUpload,
 } from "./youtube";
 import { refreshDueMetrics } from "./metrics";
+import { findPostedNote, noteUrl, postNote } from "./substack";
 
 const MAX_ATTEMPTS = 3;
 /** Give Meta this long to transcode before we call the target dead. */
@@ -122,6 +124,37 @@ async function beginCarouselPublish(
   return { state: "failed", error: "YouTube has no carousel format" };
 }
 
+/**
+ * Substack Note: one synchronous POST, no processing phase. Posting is not
+ * idempotent, so it first checks her profile for the same text and adopts
+ * that Note rather than posting a second copy.
+ */
+async function beginTextPublish(
+  post: SocialPost,
+  target: SocialTarget,
+  account: SocialAccount
+): Promise<PublishStep> {
+  if (target.platform !== "substack") {
+    return { state: "failed", error: `${target.platform} does not take text-only posts` };
+  }
+  const text = targetCaption(post, target).trim();
+  if (!text) return { state: "failed", error: "Note is empty" };
+
+  // Checked on EVERY attempt, not just retries: a worker that died between
+  // Substack's 200 and our DB write comes back via lease recovery with
+  // attempts unchanged, and would otherwise post the same Note again.
+  const existing = await findPostedNote(
+    account.external_id,
+    text,
+    post.scheduled_at || target.created_at
+  );
+  if (existing) {
+    return { state: "published", externalId: existing, externalUrl: noteUrl(account.username, existing) };
+  }
+  const { id } = await postNote(text);
+  return { state: "published", externalId: id, externalUrl: noteUrl(account.username, id) };
+}
+
 /** First publish step for a pending target. */
 async function beginPublish(
   post: SocialPost,
@@ -144,6 +177,12 @@ async function beginPublish(
   }
   if (post.post_type === "carousel") {
     return beginCarouselPublish(post, target, account, media);
+  }
+  if (post.post_type === "text") {
+    return beginTextPublish(post, target, account);
+  }
+  if (target.platform === "substack") {
+    return { state: "failed", error: "Substack takes text Notes only" };
   }
   if (!post.video_url) return { state: "failed", error: "Post has no video attached" };
   const caption = targetCaption(post, target);
@@ -205,6 +244,10 @@ async function continuePublish(
     if (!account.access_token) return { state: "failed", error: "Facebook account token missing" };
     return fbAdvance(account.external_id, account.access_token, ref);
   }
+  if (target.platform === "substack") {
+    // Notes publish in one call and never park in processing.
+    return { state: "failed", error: "Substack Note was left in processing" };
+  }
   if (!account.refresh_token) return { state: "failed", error: "YouTube channel has no refresh token" };
   const accessToken = await googleRefreshAccessToken(account.refresh_token);
   const uploaded = await ytResumeVideoUpload(accessToken, ref as unknown as YouTubeUploadRef);
@@ -258,6 +301,23 @@ async function applyStep(
       .eq("id", target.id);
     if (error) throw new Error(`Could not save failed target: ${error.message}`);
   }
+}
+
+/** A Repurpose draft that went out as a Note: close its loop in the content log. */
+async function markDerivativePublished(
+  supabase: AdminClient,
+  derivativeId: string,
+  externalUrl: string | null
+): Promise<void> {
+  await supabase
+    .from("content_derivatives")
+    .update({
+      status: "published",
+      published_at: new Date().toISOString(),
+      external_url: externalUrl,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", derivativeId);
 }
 
 /** Roll a publishing post up once none of its targets are still in flight. */
@@ -491,6 +551,9 @@ export async function runSocialTick(
               : await continuePublish(target, target.account);
         }
         await applyStep(supabase, target, step, attemptsDelta);
+        if (step.state === "published" && target.post.source_derivative_id) {
+          await markDerivativePublished(supabase, target.post.source_derivative_id, step.externalUrl);
+        }
 
         // YouTube session creation is deliberately metadata-only. Once its ref
         // is durable, upload the chunks immediately in this same publish call;
