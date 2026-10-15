@@ -23,7 +23,9 @@ export const MEDIA_PLATFORMS: SocialPlatform[] = ["instagram", "facebook", "yout
 export type PublishStep =
   | { state: "processing"; ref: Record<string, unknown> } // platform still ingesting; carry ref to next tick
   | { state: "published"; externalId: string; externalUrl: string | null }
-  | { state: "failed"; error: string; retryable?: boolean };
+  // noAttempt: the platform was busy (rate limit) and nothing reached it, so
+  // the next tick retries without spending one of MAX_ATTEMPTS.
+  | { state: "failed"; error: string; retryable?: boolean; noAttempt?: boolean };
 
 /** Normalized per-video performance numbers; raw platform payload kept alongside. */
 export interface MetricSnapshot {
