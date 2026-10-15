@@ -30,9 +30,11 @@ import {
   ytStartVideoUpload,
 } from "./youtube";
 import { refreshDueMetrics } from "./metrics";
-import { findPostedNote, noteUrl, postNote } from "./substack";
+import { findPostedNote, noteUrl, postNote, SubstackRateLimitError } from "./substack";
 
 const MAX_ATTEMPTS = 3;
+/** How long a rate-limited Substack Note keeps retrying for free after its scheduled time. */
+const RATE_LIMIT_GRACE_MS = 2 * 60 * 60 * 1000;
 /** Give Meta this long to transcode before we call the target dead. */
 const PROCESSING_DEADLINE_MS = 45 * 60 * 1000;
 /** A pending-target claim older than this came from a dead worker and may be recovered. */
@@ -143,16 +145,33 @@ async function beginTextPublish(
   // Checked on EVERY attempt, not just retries: a worker that died between
   // Substack's 200 and our DB write comes back via lease recovery with
   // attempts unchanged, and would otherwise post the same Note again.
-  const existing = await findPostedNote(
-    account.external_id,
-    text,
-    post.scheduled_at || target.created_at
-  );
-  if (existing) {
-    return { state: "published", externalId: existing, externalUrl: noteUrl(account.username, existing) };
+  try {
+    const existing = await findPostedNote(
+      account.external_id,
+      text,
+      post.scheduled_at || target.created_at
+    );
+    if (existing) {
+      return { state: "published", externalId: existing, externalUrl: noteUrl(account.username, existing) };
+    }
+    const { id } = await postNote(text);
+    return { state: "published", externalId: id, externalUrl: noteUrl(account.username, id) };
+  } catch (e) {
+    // A 429 (on the duplicate check or on the post itself) means Substack
+    // refused the request and nothing was created. Wait for the next tick
+    // instead of burning an attempt, for up to RATE_LIMIT_GRACE_MS after the
+    // scheduled time; after that it counts like any other failure.
+    if (e instanceof SubstackRateLimitError) {
+      const due = new Date(post.scheduled_at || target.created_at).getTime();
+      const withinGrace = Date.now() - due < RATE_LIMIT_GRACE_MS;
+      return {
+        state: "failed",
+        error: `${e.message}${withinGrace ? " (Substack busy, retrying next tick)" : ""}`,
+        noAttempt: withinGrace,
+      };
+    }
+    throw e;
   }
-  const { id } = await postNote(text);
-  return { state: "published", externalId: id, externalUrl: noteUrl(account.username, id) };
 }
 
 /** First publish step for a pending target. */
@@ -542,6 +561,7 @@ export async function runSocialTick(
             target.account,
             mediaByPost.get(target.post_id) || []
           );
+          if (step.state === "failed" && step.noAttempt) attemptsDelta = 0;
         } else {
           // Give up on zombies stuck in platform processing.
           const age = Date.now() - new Date(target.updated_at).getTime();

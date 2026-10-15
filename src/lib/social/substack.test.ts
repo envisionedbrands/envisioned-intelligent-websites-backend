@@ -9,6 +9,7 @@ import {
   noteUrl,
   postNote,
   SubstackAuthError,
+  SubstackRateLimitError,
 } from "./substack.ts";
 
 type Call = { url: string; init: RequestInit };
@@ -69,6 +70,18 @@ test("postNote sends a browser User-Agent (Substack 429s without one) and the do
 test("a refused login surfaces as SubstackAuthError, not a generic failure", async () => {
   mockFetch(() => ({ status: 403, body: { error: "nope" } }));
   await assert.rejects(postNote("x"), SubstackAuthError);
+});
+
+test("a 429 surfaces as SubstackRateLimitError so the publisher can wait instead of failing", async () => {
+  mockFetch(() => ({ status: 429, body: "Too Many Requests" }));
+  await assert.rejects(postNote("x"), SubstackRateLimitError);
+  await assert.rejects(findPostedNote(1, "x", "2026-10-15T18:30:00Z"), SubstackRateLimitError);
+});
+
+test("the duplicate check reads one page of her profile, not two", async () => {
+  const calls = mockFetch(() => ({ body: { items: [], nextCursor: "more" } }));
+  await findPostedNote(1, "x", "2026-10-15T18:30:00Z");
+  assert.equal(calls.length, 1);
 });
 
 test("findPostedNote adopts an identical Note posted after the scheduled time, ignores older and replies", async () => {

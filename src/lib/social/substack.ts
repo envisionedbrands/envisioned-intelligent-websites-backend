@@ -28,6 +28,10 @@ const BROWSER_UA =
 /** The session is missing, expired or revoked: only the owner can fix it. */
 export class SubstackAuthError extends Error {}
 
+/** Substack said "Too Many Requests" (HTTP 429). Nothing was created; the
+ * same request can be tried again later. */
+export class SubstackRateLimitError extends Error {}
+
 export function substackConfigured(): boolean {
   return Boolean(process.env.SUBSTACK_SID?.trim());
 }
@@ -55,6 +59,9 @@ async function sbFetch(url: string, init: { method?: string; body?: unknown } = 
   const text = await res.text();
   if (res.status === 401 || res.status === 403) {
     throw new SubstackAuthError(`Substack refused the login (HTTP ${res.status}) — reconnect Substack`);
+  }
+  if (res.status === 429) {
+    throw new SubstackRateLimitError(`Substack 429 on ${new URL(url).pathname}: Too Many Requests`);
   }
   if (!res.ok) {
     throw new Error(`Substack ${res.status} on ${new URL(url).pathname}: ${text.slice(0, 200)}`);
@@ -222,7 +229,9 @@ export async function findPostedNote(
 ): Promise<string | null> {
   const want = normalizeNoteText(markdown);
   const since = new Date(sinceIso).getTime() - 5 * 60 * 1000;
-  const notes = await listOwnNotes(userId, 2);
+  // One page is ~20 Notes, far more than she posts between a schedule and its
+  // retry; a second page only doubles the reads Substack rate-limits.
+  const notes = await listOwnNotes(userId, 1);
   const hit = notes.find(
     (n) => new Date(n.date).getTime() >= since && normalizeNoteText(n.body) === want
   );
