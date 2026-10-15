@@ -9,6 +9,7 @@ import { sendCrmEmail } from "@/lib/crm/email";
 import { renderMergeTags, unsubscribeUrl } from "@/lib/crm/merge";
 import { renderEmailHtml } from "@/lib/crm/markdown";
 import { logActivity } from "@/lib/crm/activity";
+import { scheduleSubstackNote } from "@/lib/social/substack-ops";
 import type { AdminClient } from "@/lib/crm/types";
 import type { Json, Tables } from "@/types/database";
 
@@ -33,6 +34,13 @@ interface WorkflowPayload {
   workflow_name: string;
 }
 
+interface SocialPostPayload {
+  platform: "substack";
+  derivative_id: string | null;
+  text: string;
+  scheduled_at: string;
+}
+
 interface DmFunnelPayload {
   funnel_id: string;
   funnel_name: string;
@@ -47,8 +55,26 @@ export async function executeAgentAction(
   if (action.type === "publish") return executePublish(supabase, action);
   if (action.type === "workflow") return executeWorkflowActivation(supabase, action);
   if (action.type === "dm_funnel") return executeDmFunnelActivation(supabase, action);
+  if (action.type === "social_post") return executeSocialPost(supabase, action);
   // 'other' actions are informational to-dos — approving acknowledges them.
   return { acknowledged: true };
+}
+
+/**
+ * An approved Substack Note proposal. Schedules the text exactly as it was on
+ * the approval card (payload.text), not whatever the draft says now — what
+ * she approved is what goes out. The publisher posts it when due.
+ */
+async function executeSocialPost(supabase: AdminClient, action: AgentAction): Promise<Json> {
+  const payload = action.payload as unknown as SocialPostPayload;
+  if (payload.platform !== "substack" || !payload.text) throw new Error("Unsupported social post proposal");
+  const result = await scheduleSubstackNote(supabase, {
+    derivativeId: payload.derivative_id,
+    text: payload.text,
+    scheduledAt: payload.scheduled_at,
+    createdBy: "agent:operator",
+  });
+  return { scheduled: true, post_id: result.postId, scheduled_at: result.scheduledAt } as Json;
 }
 
 async function executeEmail(supabase: AdminClient, action: AgentAction): Promise<Json> {

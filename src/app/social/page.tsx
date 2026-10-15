@@ -30,6 +30,7 @@ import {
   type AccountRow,
   type MediaRow,
   type PostRow,
+  COMPOSER_PLATFORMS,
   fmtCount,
   PLATFORM_META,
   PlatformBadge,
@@ -431,7 +432,9 @@ function Composer({
   show: (t: string, k?: 'ok' | 'err') => void;
 }) {
   // Post type is chosen at creation and fixed once the post exists.
-  const [postType, setPostType] = useState<'video' | 'carousel'>(editing?.post_type || 'video');
+  const [postType, setPostType] = useState<'video' | 'carousel'>(
+    editing?.post_type === 'carousel' ? 'carousel' : 'video'
+  );
   const [title, setTitle] = useState(editing?.title || '');
   const [caption, setCaption] = useState(editing?.caption || '');
   const [when, setWhen] = useState(
@@ -442,7 +445,12 @@ function Composer({
         : ''
   );
   const [selected, setSelected] = useState<Set<string>>(
-    new Set(editing?.targets.map((t) => t.account_id) || accounts.filter((a) => a.status === 'active').map((a) => a.id))
+    new Set(
+      editing?.targets.map((t) => t.account_id) ||
+        accounts
+          .filter((a) => a.status === 'active' && COMPOSER_PLATFORMS.includes(a.platform))
+          .map((a) => a.id)
+    )
   );
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -463,7 +471,7 @@ function Composer({
     }
   }, [editing, setVideo]);
 
-  const active = accounts.filter((a) => a.status === 'active');
+  const active = accounts.filter((a) => a.status === 'active' && COMPOSER_PLATFORMS.includes(a.platform));
   const carousel = postType === 'carousel';
 
   const toggle = (id: string) => {
@@ -923,6 +931,11 @@ function PostDetail({
                 </>
               )}
             </div>
+          ) : post.post_type === 'text' ? (
+            // Substack Note: the words are the post.
+            <div className="max-h-[420px] overflow-y-auto rounded-xl bg-minimal-row border border-minimal-border p-4 text-[13px] leading-[1.7] text-zinc-300 whitespace-pre-wrap">
+              {post.caption}
+            </div>
           ) : (
             <div className="aspect-[9/16] rounded-xl overflow-hidden bg-minimal-row border border-minimal-border">
               {post.video_url && (
@@ -1018,7 +1031,8 @@ function PostDetail({
                 {post.status === 'failed' || post.status === 'partial' ? 'Retry now' : 'Publish now'}
               </PrimaryBtn>
             )}
-            {editable && <GhostBtn onClick={onEdit}>Edit</GhostBtn>}
+            {/* Notes aren't edited in the Reel composer: cancel and reschedule from Repurpose. */}
+            {editable && post.post_type !== 'text' && <GhostBtn onClick={onEdit}>Edit</GhostBtn>}
             {['scheduled', 'canceled', 'failed'].includes(post.status) && (
               <GhostBtn
                 disabled={busy}

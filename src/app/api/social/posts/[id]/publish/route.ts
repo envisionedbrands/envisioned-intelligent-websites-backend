@@ -33,6 +33,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!slideCount) {
       return NextResponse.json({ error: "Attach at least 1 photo before publishing" }, { status: 400 });
     }
+  } else if (post.post_type === "text") {
+    // Sending a Note now publishes words under her name: owner session only.
+    if (auth.mode !== "session" || auth.role !== "admin") {
+      return NextResponse.json({ error: "Only the owner can send a Substack Note now" }, { status: 403 });
+    }
+    if (!post.caption?.trim()) {
+      return NextResponse.json({ error: "This Note is empty" }, { status: 400 });
+    }
   } else if (!post.video_url) {
     return NextResponse.json({ error: "Attach a video before publishing" }, { status: 400 });
   }

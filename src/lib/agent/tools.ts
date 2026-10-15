@@ -15,6 +15,7 @@ import { routeOfferForLead } from "@/lib/crm/offers";
 import { callModelStructured, loadBrandContext, REWRITE_SCHEMA, SEQUENCE_CRAFT_RULES } from "@/lib/crm/ai";
 import { getContentAttribution } from "@/lib/crm/attribution";
 import { draftPersonalizedBatch } from "./batch";
+import { derivativeNoteText, substackNoteStats } from "@/lib/social/substack-ops";
 import type { Json, Tables } from "@/types/database";
 
 const STALLED_AFTER_DAYS = 7;
@@ -696,6 +697,47 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         reason: { type: "string", description: "One line: why activate this now" },
       },
       required: ["funnel_id", "reason"],
+    },
+  },
+  {
+    name: "list_substack_drafts",
+    description:
+      "List Substack Note drafts made by Repurpose (content_derivatives, kind substack_note) that have not gone out yet, with their full text. Use before propose_substack_note.",
+    input_schema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Max drafts (default 20)" },
+      },
+    },
+  },
+  {
+    name: "propose_substack_note",
+    description:
+      "Propose ONE Substack Note for a specific time. Goes to the approvals queue; nothing is posted until the owner approves, and the exact text shown on the approval card is what posts. Pass a Repurpose draft (derivative_id) or your own text in her voice. One call per Note.",
+    input_schema: {
+      type: "object",
+      properties: {
+        derivative_id: { type: "string", description: "content_derivatives UUID of a substack_note draft" },
+        text: {
+          type: "string",
+          description: "The Note itself (Markdown: blank line = new paragraph, **bold**, *italic*, bare URLs link). Overrides the draft's text if both are given.",
+        },
+        scheduled_at: { type: "string", description: "ISO 8601 date-time with timezone, in the future" },
+        reason: { type: "string", description: "One line: why this Note, why this time" },
+      },
+      required: ["scheduled_at", "reason"],
+    },
+  },
+  {
+    name: "substack_note_stats",
+    description:
+      "Rank recent Substack Notes by what they did: new paid and free subscribers (Substack's own per-Note attribution), impressions, link clicks, likes, replies, restacks. Covers Notes sent from the CRM and Notes she posted in the Substack app.",
+    input_schema: {
+      type: "object",
+      properties: {
+        days: { type: "number", description: "Look-back window in days (default 30)" },
+        limit: { type: "number", description: "Max Notes returned (default 20)" },
+      },
     },
   },
 ];
@@ -2004,6 +2046,114 @@ const executors: Record<string, Executor> = {
     return {
       data: { action_id: action.id, status: "proposed" },
       summary: `Proposed activating "${funnel.name}" on "${funnel.keyword}" — waiting for approval`,
+    };
+  },
+
+  async list_substack_drafts(input, { supabase }) {
+    const limit = Math.min(50, Math.max(1, Number(input.limit) || 20));
+    const { data, error } = await supabase
+      .from("content_derivatives")
+      .select("id, title, body, cta, status, created_at")
+      .eq("kind", "substack_note")
+      .in("status", ["draft", "approved"])
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(error.message);
+    const drafts = (data || []).map((d) => ({
+      derivative_id: d.id,
+      from_article: d.title,
+      status: d.status,
+      text: derivativeNoteText(d),
+      created_at: d.created_at,
+    }));
+    return { data: drafts, summary: `${drafts.length} Substack Note draft${drafts.length === 1 ? "" : "s"} waiting` };
+  },
+
+  async propose_substack_note(input, { supabase, runId }) {
+    const when = new Date(str(input.scheduled_at));
+    if (Number.isNaN(when.getTime())) throw new Error("scheduled_at must be an ISO date-time");
+    if (when.getTime() < Date.now()) throw new Error("scheduled_at is in the past");
+
+    const { data: account } = await supabase
+      .from("social_accounts")
+      .select("username, status")
+      .eq("platform", "substack")
+      .maybeSingle();
+    if (!account) throw new Error("Substack is not connected in the CRM yet");
+
+    let text = str(input.text);
+    const derivativeId = str(input.derivative_id) || null;
+    if (derivativeId) {
+      const { data: d } = await supabase
+        .from("content_derivatives")
+        .select("id, kind, body, cta, status")
+        .eq("id", derivativeId)
+        .maybeSingle();
+      if (!d || d.kind !== "substack_note") throw new Error("derivative_id is not a Substack Note draft");
+      if (["scheduled", "published", "archived"].includes(d.status)) {
+        throw new Error(`That draft is already ${d.status}`);
+      }
+      if (!text) text = derivativeNoteText(d);
+    }
+    if (!text) throw new Error("Give a derivative_id or the Note text");
+
+    // Shown in her timezone on the card; stored as UTC in the payload.
+    const whenLabel = when.toLocaleString("en-GB", {
+      timeZone: "Europe/Amsterdam",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const description = [
+      `Posts as **@${account.username}** on Substack Notes, **${whenLabel}** (Amsterdam).`,
+      account.status !== "active" ? "\n⚠️ The Substack login is currently failing — reconnect before approving." : null,
+      "",
+      `> ${text.replace(/\n/g, "\n> ")}`,
+      "",
+      "_Approving schedules exactly this text. To change a word, reject and ask for a new proposal._",
+    ]
+      .filter((v) => v !== null)
+      .join("\n");
+
+    const { data: action, error } = await supabase
+      .from("agent_actions")
+      .insert({
+        run_id: runId,
+        type: "social_post",
+        title: `Substack Note · ${whenLabel}`,
+        summary: str(input.reason) || null,
+        payload: {
+          platform: "substack",
+          derivative_id: derivativeId,
+          text,
+          scheduled_at: when.toISOString(),
+          description,
+          reason: str(input.reason) || null,
+        } as Json,
+      })
+      .select("id")
+      .single();
+    if (error || !action) throw new Error(`Failed to queue the Note: ${error?.message}`);
+
+    return {
+      data: { action_id: action.id, status: "proposed", scheduled_at: when.toISOString() },
+      summary: `Proposed a Substack Note for ${whenLabel} — waiting for approval`,
+    };
+  },
+
+  async substack_note_stats(input, { supabase }) {
+    const stats = await substackNoteStats(supabase, {
+      days: Number(input.days) || 30,
+      limit: Math.min(100, Number(input.limit) || 20),
+    });
+    const t = stats.totals as Record<string, number>;
+    return {
+      data: stats,
+      summary: stats.notes.length
+        ? `${t.notes} Notes in ${stats.days} days · ${t.new_free_subscribers} free + ${t.new_paid_subscribers} paid subs · ${t.impressions} impressions`
+        : `No Substack Notes recorded in the last ${stats.days} days`,
     };
   },
 };

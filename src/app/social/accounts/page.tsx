@@ -142,6 +142,18 @@ export default function SocialAccountsPage() {
     }
   }, [load, show]);
 
+  // Substack has no OAuth: the login lives in the Worker secret SUBSTACK_SID,
+  // and this asks the server to check it and record whose account it is.
+  const connectSubstack = async () => {
+    try {
+      const res = await api<{ connected: string[] }>('/api/social/substack', { method: 'POST' });
+      show(`Connected: ${res.connected.join(' · ')}`);
+      load();
+    } catch (e) {
+      show(e instanceof Error ? e.message : 'Substack connect failed', 'err');
+    }
+  };
+
   const disconnect = async (a: AccountRow) => {
     if (!confirm(`Disconnect ${a.name}? Published history stays; new posts can't target it.`)) return;
     try {
@@ -199,6 +211,7 @@ export default function SocialAccountsPage() {
             >
               Connect YouTube
             </GhostBtn>
+            <GhostBtn onClick={connectSubstack}>Connect Substack</GhostBtn>
           </>
         )}
       </PageHeader>
@@ -245,6 +258,10 @@ export default function SocialAccountsPage() {
                     {PLATFORM_META[a.platform].label} · connected {timeAgo(a.connected_at)}
                     {a.platform === 'instagram' &&
                       (a.dm_connected ? ' · DMs on' : ' · DMs not connected')}
+                    {a.platform === 'substack' &&
+                      (a.status === 'error'
+                        ? ' · login stopped working — refresh SUBSTACK_SID, then Connect Substack'
+                        : ' · Notes are scheduled from Repurpose')}
                   </div>
                 </div>
                 <StatusDot status={a.status} map={ACCOUNT_STATUS_DOTS} />

@@ -10,6 +10,7 @@ import type { AdminClient } from "@/lib/crm/types";
 import type { MetricSnapshot, SocialAccount, SocialTarget } from "./types";
 import { fbFetchMetrics, fbFetchPostMetrics, igFetchMetrics } from "./meta";
 import { googleRefreshAccessToken, ytFetchMetrics } from "./youtube";
+import { fetchNoteMetrics } from "./substack";
 
 const SNAPSHOT_STALE_MS = 6 * 60 * 60 * 1000;
 const TRACK_WINDOW_DAYS = 30;
@@ -59,7 +60,7 @@ export async function refreshDueMetrics(
   for (const row of due.slice(0, MAX_PER_TICK)) {
     const target = row as unknown as SocialTarget & {
       account: SocialAccount | null;
-      post: { post_type: "video" | "carousel" } | null;
+      post: { post_type: "video" | "carousel" | "text" } | null;
     };
     const account = target.account;
     if (!account || !target.external_id) continue;
@@ -73,6 +74,9 @@ export async function refreshDueMetrics(
           target.post?.post_type === "carousel"
             ? await fbFetchPostMetrics(target.external_id, account.access_token || "")
             : await fbFetchMetrics(target.external_id, account.access_token || "");
+      } else if (target.platform === "substack") {
+        // Session cookie comes from the SUBSTACK_SID secret, not the row.
+        snap = await fetchNoteMetrics(target.external_id);
       } else {
         let token = ytTokens.get(account.id);
         if (!token) {
